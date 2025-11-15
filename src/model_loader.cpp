@@ -17,68 +17,89 @@ ModelData ModelLoader::loadOBJ(const std::string &filepath) {
 
   std::cout << "Loading OBJ model: " << filepath << std::endl;
 
-  std::vector<glm::vec3> temp_vertices;
-  std::vector<glm::vec3> temp_normals;
-  std::vector<unsigned int> vertex_indices, normal_indices;
-
-  std::unordered_map<std::string, unsigned int> vertex_map;
+  std::vector<std::string> lines;
   std::string line;
-  int line_count = 0;
-
   while (std::getline(file, line)) {
-    line_count++;
+    lines.push_back(std::move(line));
+  }
+  file.close();
 
-    if (line_count % 10000 == 0) {
-      std::cout << "Processing line " << line_count << "..." << std::endl;
-    }
+  std::vector<int> line_types(lines.size());
+  std::vector<size_t> v_indices, vn_indices, f_indices;
 
-    std::istringstream iss(line);
-    std::string prefix;
-    iss >> prefix;
-
-    if (prefix == "v") {
-      float x, y, z;
-      iss >> x >> y >> z;
-      temp_vertices.push_back(glm::vec3(x, y, z));
-    } else if (prefix == "vn") {
-      float nx, ny, nz;
-      iss >> nx >> ny >> nz;
-      temp_normals.push_back(glm::vec3(nx, ny, nz));
-    } else if (prefix == "f") {
-      std::string vertex1, vertex2, vertex3;
-      iss >> vertex1 >> vertex2 >> vertex3;
-
-      auto parse_face_vertex =
-          [](const std::string &vertex_str) -> std::pair<int, int> {
-        size_t first_slash = vertex_str.find('/');
-        int v_idx = std::stoi(vertex_str.substr(0, first_slash)) - 1;
-
-        int n_idx = -1;
-        if (first_slash != std::string::npos) {
-          size_t second_slash = vertex_str.find('/', first_slash + 1);
-          if (second_slash != std::string::npos &&
-              second_slash + 1 < vertex_str.length()) {
-            n_idx = std::stoi(vertex_str.substr(second_slash + 1)) - 1;
-          }
-        }
-        return {v_idx, n_idx};
-      };
-
-      auto [v1, n1] = parse_face_vertex(vertex1);
-      auto [v2, n2] = parse_face_vertex(vertex2);
-      auto [v3, n3] = parse_face_vertex(vertex3);
-
-      vertex_indices.push_back(v1);
-      vertex_indices.push_back(v2);
-      vertex_indices.push_back(v3);
-
-      normal_indices.push_back(n1);
-      normal_indices.push_back(n2);
-      normal_indices.push_back(n3);
+  for (size_t i = 0; i < lines.size(); i++) {
+    const std::string &line = lines[i];
+    if (line.empty()) continue;
+    if (line[0] == 'v' && line.size() > 1) {
+      if (line[1] == 'n') {
+        line_types[i] = 2;
+        vn_indices.push_back(i);
+      } else if (line[1] == ' ') {
+        line_types[i] = 1;
+        v_indices.push_back(i);
+      }
+    } else if (line[0] == 'f' && line.size() > 1 && line[1] == ' ') {
+      line_types[i] = 3;
+      f_indices.push_back(i);
     }
   }
 
-  file.close();
+  std::vector<glm::vec3> temp_vertices(v_indices.size());
+  std::vector<glm::vec3> temp_normals(vn_indices.size());
+  std::vector<unsigned int> vertex_indices(f_indices.size() * 3);
+  std::vector<unsigned int> normal_indices(f_indices.size() * 3);
+
+  #pragma omp parallel for
+  for (size_t i = 0; i < v_indices.size(); i++) {
+    std::istringstream iss(lines[v_indices[i]]);
+    std::string prefix;
+    float x, y, z;
+    iss >> prefix >> x >> y >> z;
+    temp_vertices[i] = glm::vec3(x, y, z);
+  }
+
+  #pragma omp parallel for
+  for (size_t i = 0; i < vn_indices.size(); i++) {
+    std::istringstream iss(lines[vn_indices[i]]);
+    std::string prefix;
+    float nx, ny, nz;
+    iss >> prefix >> nx >> ny >> nz;
+    temp_normals[i] = glm::vec3(nx, ny, nz);
+  }
+
+  auto parse_face_vertex = [](const std::string &vertex_str) -> std::pair<int, int> {
+    size_t first_slash = vertex_str.find('/');
+    int v_idx = std::stoi(vertex_str.substr(0, first_slash)) - 1;
+
+    int n_idx = -1;
+    if (first_slash != std::string::npos) {
+      size_t second_slash = vertex_str.find('/', first_slash + 1);
+      if (second_slash != std::string::npos &&
+          second_slash + 1 < vertex_str.length()) {
+        n_idx = std::stoi(vertex_str.substr(second_slash + 1)) - 1;
+      }
+    }
+    return {v_idx, n_idx};
+  };
+
+  #pragma omp parallel for
+  for (size_t i = 0; i < f_indices.size(); i++) {
+    std::istringstream iss(lines[f_indices[i]]);
+    std::string prefix, vertex1, vertex2, vertex3;
+    iss >> prefix >> vertex1 >> vertex2 >> vertex3;
+
+    auto [v1, n1] = parse_face_vertex(vertex1);
+    auto [v2, n2] = parse_face_vertex(vertex2);
+    auto [v3, n3] = parse_face_vertex(vertex3);
+
+    vertex_indices[i * 3 + 0] = v1;
+    vertex_indices[i * 3 + 1] = v2;
+    vertex_indices[i * 3 + 2] = v3;
+
+    normal_indices[i * 3 + 0] = n1;
+    normal_indices[i * 3 + 1] = n2;
+    normal_indices[i * 3 + 2] = n3;
+  }
 
   std::cout << "Loaded " << temp_vertices.size() << " vertices, "
             << vertex_indices.size() / 3 << " triangles" << std::endl;

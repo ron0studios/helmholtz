@@ -44,3 +44,4 @@ build/
 PLAN.md
 *.obj
 *.bvh
+.cache/

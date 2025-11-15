@@ -3,11 +3,13 @@ project(RadioWaveVisualization)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find required packages
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(OpenMP REQUIRED)
 
 # Try to find GLEW
 find_package(GLEW REQUIRED)
@@ -51,6 +53,7 @@ target_link_libraries(radio_viz
     ${OPENGL_LIBRARIES}
     glfw
     GLEW::GLEW
+	OpenMP::OpenMP_CXX
 )
 
 # Copy resources to build directory
