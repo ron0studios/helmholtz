@@ -348,10 +348,13 @@ void UIManager::renderNodePanel(NodeManager *nodeManager) {
 
 void UIManager::renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
                                 int &simulationSpeed, float &emissionStrength,
-                                bool &continuousEmission, void *fdtdSolverPtr,
+                                bool &continuousEmission,
+                                glm::vec3 &gridCenter, float &gridHalfSize,
+                                bool &autoCenterGrid,
+                                void *fdtdSolverPtr,
                                 void *volumeRendererPtr) {
   ImGui::SetNextWindowPos(ImVec2(370, 10), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(350, 400), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(350, 500), ImGuiCond_FirstUseEver);
 
   ImGui::Begin("FDTD Wave Simulation", &state.showFDTDPanel);
 
@@ -388,8 +391,31 @@ void UIManager::renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
 
     ImGui::Spacing();
     ImGui::TextWrapped(
-        "The wave source is positioned in the simulation grid and emits "
-        "oscillating electromagnetic waves.");
+        "Wave sources are automatically placed at all active transmitter nodes. "
+        "Move transmitter nodes to change source positions.");
+  }
+
+  if (fdtdEnabled &&
+      ImGui::CollapsingHeader("Grid Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Checkbox("Auto-Center on Transmitters", &autoCenterGrid);
+    
+    ImGui::Spacing();
+    if (!autoCenterGrid) {
+      ImGui::Text("Grid Center:");
+      ImGui::DragFloat3("##GridCenter", &gridCenter.x, 1.0f, -1000.0f, 1000.0f);
+
+      ImGui::Spacing();
+      ImGui::Text("Grid Size (half-width):");
+      ImGui::DragFloat("##GridHalfSize", &gridHalfSize, 5.0f, 50.0f, 1000.0f);
+    } else {
+      ImGui::TextDisabled("Grid Center: %.1f, %.1f, %.1f", gridCenter.x, gridCenter.y, gridCenter.z);
+      ImGui::TextDisabled("Grid Half-Size: %.1f", gridHalfSize);
+    }
+
+    ImGui::Spacing();
+    ImGui::TextWrapped(
+        "Auto-center positions the grid to encompass all active transmitter nodes. "
+        "Disable to manually control grid position.");
   }
 
   if (fdtdEnabled && ImGui::CollapsingHeader("Visualization",

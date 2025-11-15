@@ -44,6 +44,13 @@ public:
   // Set whether mouse look mode is active (disables ImGui input capture)
   void setMouseLookMode(bool enabled);
 
+  // Render FDTD control panel
+  void renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused, int &simulationSpeed,
+                      float &emissionStrength, bool &continuousEmission,
+                      glm::vec3 &gridCenter, float &gridHalfSize,
+                      bool &autoCenterGrid,
+                      void *fdtdSolverPtr, void *volumeRendererPtr);
+
   // UI state
   struct UIState {
     bool showControlPanel = true;

@@ -1,6 +1,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include <cfloat>
 #include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -45,6 +46,7 @@ struct AppState {
   float fdtdEmissionStrength = 0.5f;
   bool fdtdContinuousEmission = true;
   float fdtdEmissionPhase = 0.0f;
+  bool fdtdAutoCenterGrid = true;
 };
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
@@ -319,6 +321,32 @@ int main() {
 
     camera.processInput(window, deltaTime);
 
+    // Auto-center FDTD grid on transmitter nodes if enabled
+    if (appState.fdtdEnabled && appState.fdtdAutoCenterGrid) {
+      const auto &nodes = nodeManager.getNodes();
+      glm::vec3 minPos(FLT_MAX);
+      glm::vec3 maxPos(-FLT_MAX);
+      int transmitterCount = 0;
+
+      for (const auto &node : nodes) {
+        if (node.type == NodeType::TRANSMITTER && node.active) {
+          minPos = glm::min(minPos, node.position);
+          maxPos = glm::max(maxPos, node.position);
+          transmitterCount++;
+        }
+      }
+
+      if (transmitterCount > 0) {
+        // Center the grid on the bounding box of transmitters
+        fdtdGridCenter = (minPos + maxPos) * 0.5f;
+        
+        // Size the grid to encompass all transmitters with some padding
+        glm::vec3 size = maxPos - minPos;
+        float maxDim = glm::max(glm::max(size.x, size.y), size.z);
+        fdtdGridHalfSize = glm::max(maxDim * 0.75f, 100.0f); // At least 100 units
+      }
+    }
+
     // Update FDTD simulation if enabled
     if (appState.fdtdEnabled && !appState.fdtdPaused) {
       for (int i = 0; i < appState.fdtdSimulationSpeed; i++) {
@@ -329,12 +357,27 @@ int main() {
           float oscillation = std::sin(appState.fdtdEmissionPhase) *
                               appState.fdtdEmissionStrength;
 
-          // Place source in the middle of the grid
-          int sx = FDTD_GRID_SIZE / 4; // Left side
-          int sy = FDTD_GRID_SIZE / 2; // Middle height
-          int sz = FDTD_GRID_SIZE / 2; // Middle depth
+          // Place emission sources at all active transmitter node positions
+          const auto &nodes = nodeManager.getNodes();
+          for (const auto &node : nodes) {
+            if (node.type == NodeType::TRANSMITTER && node.active) {
+              // Convert world position to grid coordinates
+              glm::vec3 localPos = node.position - fdtdGridCenter;
+              glm::vec3 gridPos = (localPos / fdtdGridHalfSize) * 0.5f + 0.5f;
+              
+              // Convert to integer grid indices
+              int sx = static_cast<int>(gridPos.x * FDTD_GRID_SIZE);
+              int sy = static_cast<int>(gridPos.y * FDTD_GRID_SIZE);
+              int sz = static_cast<int>(gridPos.z * FDTD_GRID_SIZE);
+              
+              // Clamp to grid bounds
+              sx = glm::clamp(sx, 0, FDTD_GRID_SIZE - 1);
+              sy = glm::clamp(sy, 0, FDTD_GRID_SIZE - 1);
+              sz = glm::clamp(sz, 0, FDTD_GRID_SIZE - 1);
 
-          fdtdSolver.addEmissionSource(sx, sy, sz, oscillation);
+              fdtdSolver.addEmissionSource(sx, sy, sz, oscillation);
+            }
+          }
         }
         fdtdSolver.update();
       }
@@ -407,6 +450,7 @@ int main() {
     uiManager.renderFDTDPanel(
         appState.fdtdEnabled, appState.fdtdPaused, appState.fdtdSimulationSpeed,
         appState.fdtdEmissionStrength, appState.fdtdContinuousEmission,
+        fdtdGridCenter, fdtdGridHalfSize, appState.fdtdAutoCenterGrid,
         &fdtdSolver, &volumeRenderer);
     uiManager.endFrame();
 
