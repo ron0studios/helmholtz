@@ -37,6 +37,8 @@ add_executable(radio_viz
     src/node_manager.cpp
     src/node_renderer.cpp
     src/ui_manager.cpp
+    src/fdtd_solver.cpp
+    src/volume_renderer.cpp
     ${IMGUI_SOURCES}
 )
 
@@ -53,12 +55,16 @@ target_link_libraries(radio_viz
     ${OPENGL_LIBRARIES}
     glfw
     GLEW::GLEW
-	OpenMP::OpenMP_CXX
+    OpenMP::OpenMP_CXX
 )
 
 # Copy resources to build directory
 configure_file(${CMAKE_SOURCE_DIR}/hongkong.obj
     ${CMAKE_BINARY_DIR}/hongkong.obj COPYONLY)
+
+# Copy shader directory to build directory
+file(COPY ${CMAKE_SOURCE_DIR}/shaders
+    DESTINATION ${CMAKE_BINARY_DIR})
 
 # Compiler-specific options
 if(MSVC)

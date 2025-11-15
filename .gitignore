@@ -45,3 +45,4 @@ PLAN.md
 *.obj
 *.bvh
 .cache/
+ref/

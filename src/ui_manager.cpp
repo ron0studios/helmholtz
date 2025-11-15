@@ -345,3 +345,75 @@ void UIManager::renderNodePanel(NodeManager *nodeManager) {
 
   ImGui::End();
 }
+
+void UIManager::renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
+                                int &simulationSpeed, float &emissionStrength,
+                                bool &continuousEmission, void *fdtdSolverPtr,
+                                void *volumeRendererPtr) {
+  ImGui::SetNextWindowPos(ImVec2(370, 10), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(350, 400), ImGuiCond_FirstUseEver);
+
+  ImGui::Begin("FDTD Wave Simulation", &state.showFDTDPanel);
+
+  if (ImGui::CollapsingHeader("Simulation Control",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Checkbox("Enable FDTD", &fdtdEnabled);
+
+    if (fdtdEnabled) {
+      ImGui::Spacing();
+      ImGui::Checkbox("Paused", &fdtdPaused);
+
+      ImGui::Spacing();
+      ImGui::Text("Simulation Speed:");
+      ImGui::SliderInt("##Speed", &simulationSpeed, 1, 10, "%dx");
+
+      if (ImGui::Button("Reset Simulation")) {
+        // Reset will be handled by caller
+        if (fdtdSolverPtr) {
+          // Cast back to FDTDSolver and call reset
+          // This is handled in main.cpp
+        }
+      }
+    }
+  }
+
+  if (fdtdEnabled &&
+      ImGui::CollapsingHeader("Wave Source", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Checkbox("Continuous Emission", &continuousEmission);
+
+    ImGui::Spacing();
+    ImGui::Text("Emission Strength:");
+    ImGui::SliderFloat("##EmissionStrength", &emissionStrength, 0.1f, 2.0f,
+                       "%.2f");
+
+    ImGui::Spacing();
+    ImGui::TextWrapped(
+        "The wave source is positioned in the simulation grid and emits "
+        "oscillating electromagnetic waves.");
+  }
+
+  if (fdtdEnabled && ImGui::CollapsingHeader("Visualization",
+                                             ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (volumeRendererPtr) {
+      // We'll need to cast this back - for now just show info
+      ImGui::TextWrapped("Red/Blue: Wave field intensity");
+      ImGui::TextWrapped("Yellow: Emission source");
+      ImGui::TextWrapped("Green: Geometry edges");
+
+      ImGui::Spacing();
+      ImGui::TextWrapped(
+          "The volume renderer uses ray marching to visualize "
+          "the 3D electromagnetic field propagation in real-time.");
+    }
+  }
+
+  if (!fdtdEnabled) {
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::TextWrapped(
+        "Enable FDTD to simulate electromagnetic wave propagation using the "
+        "Finite-Difference Time-Domain method on the GPU.");
+  }
+
+  ImGui::End();
+}

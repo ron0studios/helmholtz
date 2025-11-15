@@ -1,11 +1,14 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 
+
 #include "camera.h"
+#include "fdtd_solver.h"
 #include "model_loader.h"
 #include "node_manager.h"
 #include "node_renderer.h"
@@ -13,6 +16,7 @@
 #include "renderer.h"
 #include "spatial_index.h"
 #include "ui_manager.h"
+#include "volume_renderer.h"
 
 Camera camera(45.0f, 1920.0f / 1080.0f, 0.1f, 10000.0f);
 float lastX = 960.0f;
@@ -33,6 +37,14 @@ struct AppState {
 
   bool showPlacementPreview = false;
   glm::vec3 placementPreviewPos = glm::vec3(0.0f);
+
+  // FDTD simulation state
+  bool fdtdEnabled = false;
+  bool fdtdPaused = false;
+  int fdtdSimulationSpeed = 1;
+  float fdtdEmissionStrength = 0.5f;
+  bool fdtdContinuousEmission = true;
+  float fdtdEmissionPhase = 0.0f;
 };
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
@@ -247,6 +259,24 @@ int main() {
   nodeManager.createNode(glm::vec3(-100.0f, 120.0f, -100.0f), 2.4e9f, 20.0f,
                          NodeType::RECEIVER);
 
+  // Initialize FDTD system
+  const int FDTD_GRID_SIZE = 64; // Start with smaller grid for performance
+  FDTDSolver fdtdSolver;
+  if (!fdtdSolver.initialize(FDTD_GRID_SIZE)) {
+    std::cerr << "Failed to initialize FDTD solver" << std::endl;
+    return -1;
+  }
+
+  VolumeRenderer volumeRenderer;
+  if (!volumeRenderer.initialize()) {
+    std::cerr << "Failed to initialize volume renderer" << std::endl;
+    return -1;
+  }
+
+  // FDTD grid parameters - position the grid in world space
+  glm::vec3 fdtdGridCenter = glm::vec3(0.0f, 100.0f, 0.0f);
+  float fdtdGridHalfSize = 200.0f; // Grid spans 400 units in world space
+
   AppState appState;
   appState.uiManager = &uiManager;
   appState.nodeManager = &nodeManager;
@@ -289,6 +319,27 @@ int main() {
 
     camera.processInput(window, deltaTime);
 
+    // Update FDTD simulation if enabled
+    if (appState.fdtdEnabled && !appState.fdtdPaused) {
+      for (int i = 0; i < appState.fdtdSimulationSpeed; i++) {
+        // Add continuous oscillating source if enabled
+        if (appState.fdtdContinuousEmission) {
+          fdtdSolver.clearEmission();
+          appState.fdtdEmissionPhase += 0.1f;
+          float oscillation = std::sin(appState.fdtdEmissionPhase) *
+                              appState.fdtdEmissionStrength;
+
+          // Place source in the middle of the grid
+          int sx = FDTD_GRID_SIZE / 4; // Left side
+          int sy = FDTD_GRID_SIZE / 2; // Middle height
+          int sz = FDTD_GRID_SIZE / 2; // Middle depth
+
+          fdtdSolver.addEmissionSource(sx, sy, sz, oscillation);
+        }
+        fdtdSolver.update();
+      }
+    }
+
     if (nodeManager.isPlacementMode() && !mouseEnabled &&
         !uiManager.wantCaptureMouse()) {
       double xpos, ypos;
@@ -317,6 +368,22 @@ int main() {
 
     nodeRenderer.render(radioSystem, view, projection);
 
+    // Render FDTD volume if enabled
+    if (appState.fdtdEnabled) {
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glDepthMask(
+          GL_FALSE); // Don't write to depth buffer for transparent volume
+
+      volumeRenderer.render(fdtdSolver.getEzTexture(),
+                            fdtdSolver.getEpsilonTexture(),
+                            fdtdSolver.getEmissionTexture(), view, projection,
+                            fdtdGridCenter, fdtdGridHalfSize, FDTD_GRID_SIZE);
+
+      glDepthMask(GL_TRUE);
+      glDisable(GL_BLEND);
+    }
+
     if (appState.showPlacementPreview) {
       glm::vec3 previewColor;
       NodeType placementType = nodeManager.getPlacementType();
@@ -337,6 +404,10 @@ int main() {
 
     uiManager.beginFrame();
     uiManager.render(camera, fps, deltaTime, &nodeManager);
+    uiManager.renderFDTDPanel(
+        appState.fdtdEnabled, appState.fdtdPaused, appState.fdtdSimulationSpeed,
+        appState.fdtdEmissionStrength, appState.fdtdContinuousEmission,
+        &fdtdSolver, &volumeRenderer);
     uiManager.endFrame();
 
     glfwSwapBuffers(window);
@@ -345,6 +416,8 @@ int main() {
 
   renderer.cleanup();
   nodeRenderer.cleanup();
+  fdtdSolver.cleanup();
+  volumeRenderer.cleanup();
   uiManager.cleanup();
   glfwTerminate();
 

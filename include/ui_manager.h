@@ -23,6 +23,12 @@ public:
   void render(const Camera &camera, float fps, float deltaTime,
               NodeManager *nodeManager = nullptr);
 
+  // Render FDTD controls (pass app state from main.cpp)
+  void renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
+                       int &simulationSpeed, float &emissionStrength,
+                       bool &continuousEmission, void *fdtdSolver,
+                       void *volumeRenderer);
+
   // End frame and render ImGui
   void endFrame();
 
@@ -45,6 +51,7 @@ public:
     bool showDemoWindow = false;
     bool showPerformanceWindow = true;
     bool showNodePanel = true;
+    bool showFDTDPanel = true;
   } state;
 
 private:
