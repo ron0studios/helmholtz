@@ -1,0 +1,115 @@
+#version 430 core
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout(r32f, binding = 0) uniform image3D epsilon;
+
+uniform vec3 gridCenter;
+uniform float gridHalfSize;
+uniform int gridSize;
+uniform float materialEpsilon;
+uniform float groundLevel;
+
+// Triangle data
+struct Triangle {
+    vec3 v0;
+    float pad0;
+    vec3 v1;
+    float pad1;
+    vec3 v2;
+    float pad2;
+};
+
+layout(std430, binding = 1) readonly buffer Triangles {
+    Triangle triangles[];
+};
+
+uniform int numTriangles;
+
+// Ray-triangle intersection (Möller-Trumbore algorithm)
+bool intersectTriangle(vec3 orig, vec3 dir, vec3 v0, vec3 v1, vec3 v2, out float t) {
+    const float EPSILON = 0.0000001;
+    vec3 edge1 = v1 - v0;
+    vec3 edge2 = v2 - v0;
+    vec3 h = cross(dir, edge2);
+    float a = dot(edge1, h);
+    
+    if (abs(a) < EPSILON) {
+        return false; // Ray is parallel to triangle
+    }
+    
+    float f = 1.0 / a;
+    vec3 s = orig - v0;
+    float u = f * dot(s, h);
+    
+    if (u < 0.0 || u > 1.0) {
+        return false;
+    }
+    
+    vec3 q = cross(s, edge1);
+    float v = f * dot(dir, q);
+    
+    if (v < 0.0 || u + v > 1.0) {
+        return false;
+    }
+    
+    t = f * dot(edge2, q);
+    
+    return t > EPSILON && t < 100.0; // Max distance check
+}
+
+// Check if point is inside geometry by casting rays in multiple directions
+bool isInsideGeometry(vec3 point) {
+    // Cast ray in one direction and count intersections
+    // Odd number of intersections = inside, even = outside
+    vec3 rayDir = vec3(1.0, 0.3, 0.7); // Arbitrary direction, slightly off-axis
+    rayDir = normalize(rayDir);
+    
+    int hitCount = 0;
+    float t;
+    
+    // Count all intersections with geometry along this ray
+    for (int i = 0; i < numTriangles; i++) {
+        if (intersectTriangle(point, rayDir, 
+                            triangles[i].v0, 
+                            triangles[i].v1, 
+                            triangles[i].v2, t)) {
+            if (t > 0.001) { // Only count forward intersections
+                hitCount++;
+            }
+        }
+    }
+    
+    // Odd hit count means we're inside the geometry
+    return (hitCount % 2) == 1;
+}
+
+void main() {
+    ivec3 pos = ivec3(gl_GlobalInvocationID.xyz);
+    
+    if (pos.x >= gridSize || pos.y >= gridSize || pos.z >= gridSize) {
+        return;
+    }
+    
+    // Convert grid coordinates to world space (cell center)
+    // This must match the inverse of the transformation in fdtd_volume.frag
+    // Fragment shader: texCoord = (localPos / gridHalfSize) * 0.5 + 0.5
+    // Inverse: localPos = (texCoord - 0.5) * 2.0 * gridHalfSize
+    //          worldPos = localPos + gridCenter
+    
+    vec3 texCoord = (vec3(pos) + 0.5) / float(gridSize); // Cell center in [0,1]
+    vec3 localPos = (texCoord - 0.5) * 2.0 * gridHalfSize;
+    vec3 cellWorld = localPos + gridCenter;
+    
+    float eps = 1.0; // Air by default
+    
+    // Check ground plane first (fast)
+    if (cellWorld.y < groundLevel) {
+        eps = materialEpsilon;
+    } else if (numTriangles > 0 && isInsideGeometry(cellWorld)) {
+        // Check actual geometry
+        eps = materialEpsilon;
+    }
+    
+    imageStore(epsilon, pos, vec4(eps, 0.0, 0.0, 0.0));
+}

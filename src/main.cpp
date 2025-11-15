@@ -7,7 +7,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 
-
 #include "camera.h"
 #include "fdtd_solver.h"
 #include "model_loader.h"
@@ -278,6 +277,13 @@ int main() {
   // FDTD grid parameters - position the grid in world space
   glm::vec3 fdtdGridCenter = glm::vec3(0.0f, 100.0f, 0.0f);
   float fdtdGridHalfSize = 200.0f; // Grid spans 400 units in world space
+  glm::vec3 lastFdtdGridCenter = fdtdGridCenter;
+  float lastFdtdGridHalfSize = fdtdGridHalfSize;
+
+  // Mark geometry using GPU (instant, no performance impact)
+  std::cout << "Marking geometry in FDTD grid using GPU..." << std::endl;
+  fdtdSolver.markGeometryGPU(fdtdGridCenter, fdtdGridHalfSize, spatialIndex,
+                             0.0f, 50.0f);
 
   AppState appState;
   appState.uiManager = &uiManager;
@@ -339,12 +345,27 @@ int main() {
       if (transmitterCount > 0) {
         // Center the grid on the bounding box of transmitters
         fdtdGridCenter = (minPos + maxPos) * 0.5f;
-        
+
         // Size the grid to encompass all transmitters with some padding
         glm::vec3 size = maxPos - minPos;
         float maxDim = glm::max(glm::max(size.x, size.y), size.z);
-        fdtdGridHalfSize = glm::max(maxDim * 0.75f, 100.0f); // At least 100 units
+        fdtdGridHalfSize =
+            glm::max(maxDim * 0.75f, 100.0f); // At least 100 units
       }
+    }
+
+    // Re-mark geometry if grid changed (GPU, instant)
+    // Use a larger threshold to avoid resetting too frequently
+    if (appState.fdtdEnabled &&
+        (glm::distance(fdtdGridCenter, lastFdtdGridCenter) > 20.0f ||
+         std::abs(fdtdGridHalfSize - lastFdtdGridHalfSize) > 20.0f)) {
+      std::cout << "Grid moved significantly - resetting FDTD simulation..."
+                << std::endl;
+      fdtdSolver.reset(); // Clear all fields when grid moves
+      fdtdSolver.markGeometryGPU(fdtdGridCenter, fdtdGridHalfSize, spatialIndex,
+                                 0.0f, 50.0f);
+      lastFdtdGridCenter = fdtdGridCenter;
+      lastFdtdGridHalfSize = fdtdGridHalfSize;
     }
 
     // Update FDTD simulation if enabled
@@ -364,12 +385,12 @@ int main() {
               // Convert world position to grid coordinates
               glm::vec3 localPos = node.position - fdtdGridCenter;
               glm::vec3 gridPos = (localPos / fdtdGridHalfSize) * 0.5f + 0.5f;
-              
+
               // Convert to integer grid indices
               int sx = static_cast<int>(gridPos.x * FDTD_GRID_SIZE);
               int sy = static_cast<int>(gridPos.y * FDTD_GRID_SIZE);
               int sz = static_cast<int>(gridPos.z * FDTD_GRID_SIZE);
-              
+
               // Clamp to grid bounds
               sx = glm::clamp(sx, 0, FDTD_GRID_SIZE - 1);
               sy = glm::clamp(sy, 0, FDTD_GRID_SIZE - 1);

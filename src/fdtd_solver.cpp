@@ -1,4 +1,5 @@
 #include "fdtd_solver.h"
+#include "spatial_index.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -10,7 +11,7 @@
 FDTDSolver::FDTDSolver()
     : gridSize(0), texEx(0), texEy(0), texEz(0), texHx(0), texHy(0), texHz(0),
       texEpsilon(0), texMu(0), texEmission(0), updateEProgram(0),
-      updateHProgram(0) {}
+      updateHProgram(0), markGeometryProgram(0), triangleSSBO(0) {}
 
 FDTDSolver::~FDTDSolver() { cleanup(); }
 
@@ -133,8 +134,9 @@ bool FDTDSolver::initialize(int size) {
   // Load compute shaders
   updateEProgram = createComputeProgram("shaders/fdtd_update_e.comp");
   updateHProgram = createComputeProgram("shaders/fdtd_update_h.comp");
+  markGeometryProgram = createComputeProgram("shaders/mark_geometry.comp");
 
-  if (updateEProgram == 0 || updateHProgram == 0) {
+  if (updateEProgram == 0 || updateHProgram == 0 || markGeometryProgram == 0) {
     std::cerr << "Failed to create FDTD compute shaders" << std::endl;
     return false;
   }
@@ -239,6 +241,98 @@ void FDTDSolver::reset() {
   clearEmission();
 }
 
+void FDTDSolver::markGeometryGPU(const glm::vec3 &gridCenter,
+                                 float gridHalfSize,
+                                 const SpatialIndex &spatialIndex,
+                                 float groundLevel, float materialEpsilon) {
+  if (!markGeometryProgram) {
+    std::cerr << "Mark geometry program not loaded!" << std::endl;
+    return;
+  }
+
+  // Get triangles from spatial index
+  const auto &triangles = spatialIndex.getTriangles();
+
+  // Prepare triangle data for GPU (aligned struct)
+  struct GPUTriangle {
+    glm::vec3 v0;
+    float pad0;
+    glm::vec3 v1;
+    float pad1;
+    glm::vec3 v2;
+    float pad2;
+  };
+
+  std::vector<GPUTriangle> gpuTriangles;
+  gpuTriangles.reserve(triangles.size());
+
+  // Only include triangles within a reasonable distance of the grid
+  const float maxDist = gridHalfSize * 1.5f; // 50% padding
+  glm::vec3 gridMin = gridCenter - glm::vec3(maxDist);
+  glm::vec3 gridMax = gridCenter + glm::vec3(maxDist);
+
+  for (const auto &tri : triangles) {
+    // Simple bounding check - if any vertex is near the grid, include it
+    bool nearGrid = false;
+    for (const auto &v : {tri.v0, tri.v1, tri.v2}) {
+      if (v.x >= gridMin.x && v.x <= gridMax.x && v.y >= gridMin.y &&
+          v.y <= gridMax.y && v.z >= gridMin.z && v.z <= gridMax.z) {
+        nearGrid = true;
+        break;
+      }
+    }
+
+    if (nearGrid) {
+      GPUTriangle gpuTri;
+      gpuTri.v0 = tri.v0;
+      gpuTri.v1 = tri.v1;
+      gpuTri.v2 = tri.v2;
+      gpuTri.pad0 = gpuTri.pad1 = gpuTri.pad2 = 0.0f;
+      gpuTriangles.push_back(gpuTri);
+    }
+  }
+
+  std::cout << "Uploading " << gpuTriangles.size()
+            << " triangles to GPU (filtered from " << triangles.size()
+            << " total)..." << std::endl;
+
+  // Create/update SSBO with triangle data
+  if (triangleSSBO == 0) {
+    glGenBuffers(1, &triangleSSBO);
+  }
+
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, triangleSSBO);
+  glBufferData(GL_SHADER_STORAGE_BUFFER,
+               gpuTriangles.size() * sizeof(GPUTriangle), gpuTriangles.data(),
+               GL_STATIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, triangleSSBO);
+
+  glUseProgram(markGeometryProgram);
+
+  // Bind epsilon texture as writable image
+  glBindImageTexture(0, texEpsilon, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+
+  // Set uniforms
+  glUniform3f(glGetUniformLocation(markGeometryProgram, "gridCenter"),
+              gridCenter.x, gridCenter.y, gridCenter.z);
+  glUniform1f(glGetUniformLocation(markGeometryProgram, "gridHalfSize"),
+              gridHalfSize);
+  glUniform1i(glGetUniformLocation(markGeometryProgram, "gridSize"), gridSize);
+  glUniform1f(glGetUniformLocation(markGeometryProgram, "materialEpsilon"),
+              materialEpsilon);
+  glUniform1f(glGetUniformLocation(markGeometryProgram, "groundLevel"),
+              groundLevel);
+  glUniform1i(glGetUniformLocation(markGeometryProgram, "numTriangles"),
+              static_cast<int>(gpuTriangles.size()));
+
+  // Dispatch compute shader
+  int workGroups = (gridSize + 7) / 8;
+  glDispatchCompute(workGroups, workGroups, workGroups);
+  glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+  std::cout << "Geometry marking complete (GPU compute shader)" << std::endl;
+}
+
 void FDTDSolver::cleanup() {
   if (texEx)
     glDeleteTextures(1, &texEx);
@@ -262,4 +356,9 @@ void FDTDSolver::cleanup() {
     glDeleteProgram(updateEProgram);
   if (updateHProgram)
     glDeleteProgram(updateHProgram);
+  if (markGeometryProgram)
+    glDeleteProgram(markGeometryProgram);
+
+  if (triangleSSBO)
+    glDeleteBuffers(1, &triangleSSBO);
 }

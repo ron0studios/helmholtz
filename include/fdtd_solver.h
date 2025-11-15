@@ -1,6 +1,12 @@
 #pragma once
 
 #include <GL/glew.h>
+#include <glm/glm.hpp>
+#include <vector>
+
+// Forward declarations
+struct Triangle;
+class SpatialIndex;
 
 class FDTDSolver {
 public:
@@ -14,6 +20,11 @@ public:
   void clearEmission();
   void update();
   void reset();
+
+  // GPU-based geometry marking (extremely fast)
+  void markGeometryGPU(const glm::vec3 &gridCenter, float gridHalfSize,
+                       const SpatialIndex &spatialIndex,
+                       float groundLevel = 0.0f, float materialEpsilon = 50.0f);
 
   // Getters for textures (for rendering)
   GLuint getExTexture() const { return texEx; }
@@ -41,6 +52,10 @@ private:
   // Compute shader programs
   GLuint updateEProgram;
   GLuint updateHProgram;
+  GLuint markGeometryProgram;
+
+  // SSBO for triangle geometry
+  GLuint triangleSSBO;
 
   GLuint createTexture3D(int size);
   GLuint createComputeProgram(const char *shaderPath);

@@ -45,11 +45,11 @@ public:
   void setMouseLookMode(bool enabled);
 
   // Render FDTD control panel
-  void renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused, int &simulationSpeed,
-                      float &emissionStrength, bool &continuousEmission,
-                      glm::vec3 &gridCenter, float &gridHalfSize,
-                      bool &autoCenterGrid,
-                      void *fdtdSolverPtr, void *volumeRendererPtr);
+  void renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
+                       int &simulationSpeed, float &emissionStrength,
+                       bool &continuousEmission, glm::vec3 &gridCenter,
+                       float &gridHalfSize, bool &autoCenterGrid,
+                       void *fdtdSolverPtr, void *volumeRendererPtr);
 
   // UI state
   struct UIState {
