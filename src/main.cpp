@@ -289,6 +289,15 @@ int main() {
 
     camera.processInput(window, deltaTime);
 
+    radioSystem.update(deltaTime);
+
+    auto &sources = radioSystem.getSources();
+    for (auto &source : sources) {
+      if (source.useFDTD && source.active) {
+        source.updateFDTD();
+      }
+    }
+
     if (nodeManager.isPlacementMode() && !mouseEnabled &&
         !uiManager.wantCaptureMouse()) {
       double xpos, ypos;
@@ -316,6 +325,8 @@ int main() {
     renderer.render(view, projection, model);
 
     nodeRenderer.render(radioSystem, view, projection);
+    nodeRenderer.renderGrids(radioSystem, view, projection);
+    nodeRenderer.renderFDTDGrids(radioSystem, view, projection);
 
     if (appState.showPlacementPreview) {
       glm::vec3 previewColor;

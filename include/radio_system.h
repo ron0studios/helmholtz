@@ -2,8 +2,53 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
+#include <memory>
+
+class FDTDSolver;
 
 enum class NodeType { TRANSMITTER, RECEIVER, RELAY };
+
+struct SampleGrid {
+  int gridSize;
+  float spacing;
+  std::vector<glm::vec3> points;
+
+  SampleGrid() : gridSize(50), spacing(1.0f) { generateGrid(); }
+
+  void generateGrid() {
+    points.clear();
+    points.reserve(gridSize * gridSize * gridSize);
+    int center = gridSize / 2;
+    for (int x = 0; x < gridSize; x++) {
+      for (int y = 0; y < gridSize; y++) {
+        for (int z = 0; z < gridSize; z++) {
+          float xPos = (x - center) * spacing;
+          float yPos = (y - center) * spacing;
+          float zPos = (z - center) * spacing;
+          points.push_back(glm::vec3(xPos, yPos, zPos));
+        }
+      }
+    }
+  }
+
+  void setGridSize(int size) {
+    if (size < 1)
+      size = 1;
+    if (size > 100)
+      size = 100;
+    gridSize = size;
+    generateGrid();
+  }
+
+  void setSpacing(float s) {
+    if (s < 0.1f)
+      s = 0.1f;
+    if (s > 100.0f)
+      s = 100.0f;
+    spacing = s;
+    generateGrid();
+  }
+};
 
 struct RadioSource {
   int id;
@@ -23,14 +68,20 @@ struct RadioSource {
   bool selected;
   bool visible;
 
+  SampleGrid sampleGrid;
+  std::unique_ptr<FDTDSolver> fdtdSolver;
+  bool useFDTD;
+
   RadioSource(int nodeId, const glm::vec3 &pos, float freq, float pwr,
-              NodeType nodeType = NodeType::TRANSMITTER)
-      : id(nodeId), name("Node_" + std::to_string(nodeId)), type(nodeType),
-        active(true), position(pos), orientation(0.0f, 0.0f, 0.0f),
-        frequency(freq), power(pwr), antennaGain(0.0f), antennaHeight(0.0f),
-        selected(false), visible(true) {
-    color = frequencyToColor(freq);
-  }
+              NodeType nodeType = NodeType::TRANSMITTER);
+
+  RadioSource(const RadioSource &other);
+  RadioSource(RadioSource &&other) noexcept = default;
+  RadioSource &operator=(const RadioSource &other);
+  RadioSource &operator=(RadioSource &&other) noexcept = default;
+
+  void enableFDTD(bool enable);
+  void updateFDTD();
 
   static glm::vec3 frequencyToColor(float freq) {
     if (freq < 1e9)

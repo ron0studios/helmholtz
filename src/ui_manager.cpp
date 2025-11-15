@@ -1,6 +1,7 @@
 #include "ui_manager.h"
 #include "camera.h"
 #include "node_manager.h"
+#include "fdtd_solver.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -339,6 +340,100 @@ void UIManager::renderNodePanel(NodeManager *nodeManager) {
     ImGui::Checkbox("Visible", &selectedNode->visible);
 
     ImGui::ColorEdit3("Color", &selectedNode->color.x);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text("Sample Grid");
+
+    int gridSize = selectedNode->sampleGrid.gridSize;
+    if (ImGui::SliderInt("Grid Size", &gridSize, 1, 100)) {
+      selectedNode->sampleGrid.setGridSize(gridSize);
+      if (selectedNode->fdtdSolver) {
+        selectedNode->fdtdSolver->setGridSize(gridSize);
+      }
+    }
+    ImGui::Text("Total Points: %d", gridSize * gridSize * gridSize);
+
+    float spacing = selectedNode->sampleGrid.spacing;
+    if (ImGui::DragFloat("Grid Spacing", &spacing, 0.1f, 0.1f, 100.0f)) {
+      selectedNode->sampleGrid.setSpacing(spacing);
+      if (selectedNode->fdtdSolver) {
+        selectedNode->fdtdSolver->setSpacing(spacing);
+      }
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text("FDTD Simulation");
+
+    bool useFDTD = selectedNode->useFDTD;
+    if (ImGui::Checkbox("Enable FDTD", &useFDTD)) {
+      selectedNode->enableFDTD(useFDTD);
+    }
+
+    if (selectedNode->useFDTD && selectedNode->fdtdSolver) {
+      if (ImGui::Button("Reset Simulation")) {
+        selectedNode->fdtdSolver->reset();
+      }
+
+      ImGui::Text("Time Step: %d", selectedNode->fdtdSolver->getTimeStep());
+
+      ImGui::Spacing();
+      ImGui::Text("Source Controls");
+
+      bool sourceEnabled = selectedNode->fdtdSolver->isSourceEnabled();
+      if (ImGui::Checkbox("Source Active", &sourceEnabled)) {
+        selectedNode->fdtdSolver->setSourceEnabled(sourceEnabled);
+      }
+
+      float freqGHz = selectedNode->fdtdSolver->getSourceFrequency() / 1e9f;
+      if (ImGui::DragFloat("Frequency (GHz)", &freqGHz, 0.1f, 0.1f, 10.0f)) {
+        selectedNode->fdtdSolver->setSourceFrequency(freqGHz * 1e9f);
+      }
+
+      float amplitude = selectedNode->fdtdSolver->getSourceAmplitude();
+      if (ImGui::DragFloat("Amplitude", &amplitude, 0.01f, 0.0f, 10.0f)) {
+        selectedNode->fdtdSolver->setSourceAmplitude(amplitude);
+      }
+
+      ImGui::Spacing();
+      ImGui::Text("Pulse Modulation");
+
+      bool pulseMode = selectedNode->fdtdSolver->isPulseMode();
+      if (ImGui::Checkbox("Enable Pulse Mode", &pulseMode)) {
+        selectedNode->fdtdSolver->setPulseMode(pulseMode);
+      }
+
+      if (pulseMode) {
+        float pulseFreq = selectedNode->fdtdSolver->getPulseFrequency();
+        if (ImGui::DragFloat("Pulse Frequency (Hz)", &pulseFreq, 0.1f, 0.1f,
+                             100.0f)) {
+          selectedNode->fdtdSolver->setPulseFrequency(pulseFreq);
+        }
+      }
+
+      ImGui::Spacing();
+      ImGui::Text("Visualization");
+
+      float colorIntensity = selectedNode->fdtdSolver->getColorIntensity();
+      if (ImGui::DragFloat("Color Intensity", &colorIntensity, 1.0f, 1.0f,
+                           1000.0f)) {
+        selectedNode->fdtdSolver->setColorIntensity(colorIntensity);
+      }
+
+      float opacity = selectedNode->fdtdSolver->getOpacity();
+      if (ImGui::SliderFloat("Opacity", &opacity, 0.0f, 1.0f)) {
+        selectedNode->fdtdSolver->setOpacity(opacity);
+      }
+
+      float brightness = selectedNode->fdtdSolver->getBrightness();
+      if (ImGui::SliderFloat("Brightness", &brightness, 0.0f, 5.0f)) {
+        selectedNode->fdtdSolver->setBrightness(brightness);
+      }
+
+      ImGui::Text("Opacity controls volume transparency");
+      ImGui::Text("Brightness boosts color intensity");
+    }
 
     ImGui::PopItemWidth();
   }

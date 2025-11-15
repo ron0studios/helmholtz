@@ -1,8 +1,73 @@
 #include "radio_system.h"
 #include "spatial_index.h"
+#include "fdtd_solver.h"
 #include <algorithm>
 #include <cmath>
 #include <glm/gtc/constants.hpp>
+
+RadioSource::RadioSource(int nodeId, const glm::vec3 &pos, float freq,
+                         float pwr, NodeType nodeType)
+    : id(nodeId), name("Node_" + std::to_string(nodeId)), type(nodeType),
+      active(true), position(pos), orientation(0.0f, 0.0f, 0.0f),
+      frequency(freq), power(pwr), antennaGain(0.0f), antennaHeight(0.0f),
+      selected(false), visible(true), useFDTD(false) {
+  color = frequencyToColor(freq);
+}
+
+RadioSource::RadioSource(const RadioSource &other)
+    : id(other.id), name(other.name), type(other.type), active(other.active),
+      position(other.position), orientation(other.orientation),
+      frequency(other.frequency), power(other.power),
+      antennaGain(other.antennaGain), antennaHeight(other.antennaHeight),
+      color(other.color), selected(other.selected), visible(other.visible),
+      sampleGrid(other.sampleGrid), useFDTD(other.useFDTD) {
+  if (other.fdtdSolver) {
+    fdtdSolver = std::make_unique<FDTDSolver>(*other.fdtdSolver);
+  }
+}
+
+RadioSource &RadioSource::operator=(const RadioSource &other) {
+  if (this != &other) {
+    id = other.id;
+    name = other.name;
+    type = other.type;
+    active = other.active;
+    position = other.position;
+    orientation = other.orientation;
+    frequency = other.frequency;
+    power = other.power;
+    antennaGain = other.antennaGain;
+    antennaHeight = other.antennaHeight;
+    color = other.color;
+    selected = other.selected;
+    visible = other.visible;
+    sampleGrid = other.sampleGrid;
+    useFDTD = other.useFDTD;
+    if (other.fdtdSolver) {
+      fdtdSolver = std::make_unique<FDTDSolver>(*other.fdtdSolver);
+    } else {
+      fdtdSolver.reset();
+    }
+  }
+  return *this;
+}
+
+void RadioSource::enableFDTD(bool enable) {
+  useFDTD = enable;
+  if (enable && !fdtdSolver) {
+    fdtdSolver = std::make_unique<FDTDSolver>(sampleGrid.gridSize,
+                                              sampleGrid.spacing);
+    fdtdSolver->setSourceFrequency(frequency);
+  } else if (!enable) {
+    fdtdSolver.reset();
+  }
+}
+
+void RadioSource::updateFDTD() {
+  if (useFDTD && fdtdSolver && active) {
+    fdtdSolver->step();
+  }
+}
 
 RadioSystem::RadioSystem()
     : nextNodeId(1), raysPerSource(64), maxBounces(2), maxDistance(2000.0f) {}

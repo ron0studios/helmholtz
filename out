@@ -1,0 +1,2646 @@
+////
+//// camera.h
+////
+#pragma once
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+class Camera {
+public:
+  Camera(float fov = 45.0f, float aspect = 16.0f / 9.0f, float near = 0.1f,
+         float far = 10000.0f);
+
+  void processInput(GLFWwindow *window, float deltaTime);
+  void processMouseMovement(float xoffset, float yoffset,
+                            bool constrainPitch = true);
+  void processMouseScroll(float yoffset);
+
+  glm::mat4 getViewMatrix() const;
+  glm::mat4 getProjectionMatrix() const;
+
+  glm::vec3 getPosition() const { return position; }
+  glm::vec3 getFront() const { return front; }
+  glm::vec3 getUp() const { return up; }
+  float getFov() const { return fov; }
+
+  void setAspectRatio(float aspect) {
+    aspectRatio = aspect;
+    updateProjectionMatrix();
+  }
+
+private:
+  glm::vec3 position;
+  glm::vec3 front;
+  glm::vec3 up;
+  glm::vec3 right;
+  glm::vec3 worldUp;
+
+  float yaw;
+  float pitch;
+
+  float movementSpeed;
+  float mouseSensitivity;
+  float zoom;
+
+  float fov;
+  float aspectRatio;
+  float nearPlane;
+  float farPlane;
+
+  glm::mat4 projectionMatrix;
+
+  void updateCameraVectors();
+  void updateProjectionMatrix();
+};
+
+////
+//// model_loader.h
+////
+#pragma once
+#include <string>
+#include <vector>
+
+struct ModelData {
+  std::vector<float> vertices;
+  std::vector<unsigned int> indices;
+  bool loaded = false;
+};
+
+class ModelLoader {
+public:
+  static ModelData loadOBJ(const std::string &filepath);
+};
+
+////
+//// node_manager.h
+////
+#pragma once
+#include "radio_system.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <string>
+#include <vector>
+
+class Camera;
+class SpatialIndex;
+
+class NodeManager {
+public:
+  NodeManager(RadioSystem &radioSystem);
+  ~NodeManager();
+
+  // Node creation and deletion
+  int createNode(const glm::vec3 &position, float frequency = 2.4e9f,
+                 float power = 20.0f, NodeType type = NodeType::TRANSMITTER);
+  void deleteNode(int id);
+  void deleteSelectedNode();
+
+  // Node selection
+  void selectNode(int id);
+  void deselectAll();
+  int getSelectedNodeId() const { return selectedNodeId; }
+  RadioSource *getSelectedNode();
+
+  // Node manipulation
+  void moveSelectedNode(const glm::vec3 &newPosition);
+  void setNodePosition(int id, const glm::vec3 &position);
+
+  // Ray picking for node selection and placement
+  int pickNode(const glm::vec3 &rayOrigin, const glm::vec3 &rayDirection,
+               float maxDistance = 10000.0f);
+  glm::vec3 pickPosition(const glm::vec3 &rayOrigin,
+                         const glm::vec3 &rayDirection,
+                         const SpatialIndex *spatialIndex, bool &hit);
+
+  // Screen to world ray conversion
+  static void screenToWorldRay(int mouseX, int mouseY, int screenWidth,
+                               int screenHeight, const Camera &camera,
+                               glm::vec3 &rayOrigin, glm::vec3 &rayDirection);
+
+  // Placement mode
+  void setPlacementMode(bool enabled) { placementMode = enabled; }
+  bool isPlacementMode() const { return placementMode; }
+  void setPlacementType(NodeType type) { placementNodeType = type; }
+  NodeType getPlacementType() const { return placementNodeType; }
+
+  // Get all nodes
+  const std::vector<RadioSource> &getNodes() const {
+    return radioSystem.getSources();
+  }
+
+  // Update (for animations, etc.)
+  void update(float deltaTime);
+
+private:
+  RadioSystem &radioSystem;
+  int selectedNodeId;
+  bool placementMode;
+  NodeType placementNodeType;
+
+  // Helper function to check ray-sphere intersection for node picking
+  bool raySphereIntersect(const glm::vec3 &rayOrigin,
+                          const glm::vec3 &rayDirection,
+                          const glm::vec3 &sphereCenter, float sphereRadius,
+                          float &distance);
+};
+
+
+////
+//// node_renderer.h
+////
+#pragma once
+#include <GL/glew.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <string>
+#include <vector>
+
+class RadioSystem;
+
+class NodeRenderer {
+public:
+  NodeRenderer();
+  ~NodeRenderer();
+
+  bool initialize();
+  void render(const RadioSystem &radioSystem, const glm::mat4 &view,
+              const glm::mat4 &projection);
+  void renderPlacementPreview(const glm::vec3 &position, const glm::vec3 &color,
+                              const glm::mat4 &view,
+                              const glm::mat4 &projection);
+  void cleanup();
+
+private:
+  // Sphere rendering for nodes
+  GLuint nodeShaderProgram;
+  GLuint sphereVAO, sphereVBO, sphereEBO;
+  size_t sphereIndexCount;
+
+  void createSphere(float radius, int segments);
+  GLuint compileShader(const std::string &source, GLenum type);
+  GLuint createShaderProgram(const std::string &vertexSource,
+                             const std::string &fragmentSource);
+
+  static const std::string nodeVertexShader;
+  static const std::string nodeFragmentShader;
+};
+
+
+////
+//// radio_system.h
+////
+#pragma once
+#include <glm/glm.hpp>
+#include <string>
+#include <vector>
+
+enum class NodeType { TRANSMITTER, RECEIVER, RELAY };
+
+struct RadioSource {
+  int id;
+  std::string name;
+  NodeType type;
+  bool active;
+
+  glm::vec3 position;
+  glm::vec3 orientation;
+
+  float frequency;
+  float power;
+  float antennaGain;
+  float antennaHeight;
+
+  glm::vec3 color;
+  bool selected;
+  bool visible;
+
+  RadioSource(int nodeId, const glm::vec3 &pos, float freq, float pwr,
+              NodeType nodeType = NodeType::TRANSMITTER)
+      : id(nodeId), name("Node_" + std::to_string(nodeId)), type(nodeType),
+        active(true), position(pos), orientation(0.0f, 0.0f, 0.0f),
+        frequency(freq), power(pwr), antennaGain(0.0f), antennaHeight(0.0f),
+        selected(false), visible(true) {
+    color = frequencyToColor(freq);
+  }
+
+  static glm::vec3 frequencyToColor(float freq) {
+    if (freq < 1e9)
+      return glm::vec3(1.0f, 0.3f, 0.3f);
+    else if (freq < 2.5e9)
+      return glm::vec3(0.3f, 1.0f, 0.3f);
+    else
+      return glm::vec3(0.3f, 0.3f, 1.0f);
+  }
+
+  static const char *nodeTypeToString(NodeType type) {
+    switch (type) {
+    case NodeType::TRANSMITTER:
+      return "Transmitter";
+    case NodeType::RECEIVER:
+      return "Receiver";
+    case NodeType::RELAY:
+      return "Relay";
+    default:
+      return "Unknown";
+    }
+  }
+};
+
+struct SignalRay {
+  glm::vec3 origin;
+  glm::vec3 direction;
+  float strength;
+  int bounces;
+  glm::vec3 color;
+  std::vector<glm::vec3> points;
+};
+
+class RadioSystem {
+public:
+  RadioSystem();
+  ~RadioSystem();
+
+  int addSource(const glm::vec3 &position, float frequency, float power,
+                NodeType type = NodeType::TRANSMITTER);
+  void removeSource(int id);
+  void removeSourceByIndex(int index);
+  RadioSource *getSourceById(int id);
+  RadioSource *getSourceByIndex(int index);
+  int getSourceCount() const { return sources.size(); }
+
+  void update(float deltaTime);
+
+  void computeSignalPropagation(const class SpatialIndex *spatialIndex);
+
+  const std::vector<RadioSource> &getSources() const { return sources; }
+  std::vector<RadioSource> &getSources() { return sources; }
+  const std::vector<SignalRay> &getSignalRays() const { return signalRays; }
+
+  void setRaysPerSource(int count) { raysPerSource = count; }
+  void setMaxBounces(int count) { maxBounces = count; }
+  void setMaxDistance(float dist) { maxDistance = dist; }
+
+private:
+  std::vector<RadioSource> sources;
+  std::vector<SignalRay> signalRays;
+
+  int nextNodeId;
+  int raysPerSource;
+  int maxBounces;
+  float maxDistance;
+
+  float calculatePathLoss(float distance, float frequency);
+  float calculateReflectionLoss(const glm::vec3 &normal);
+};
+
+
+////
+//// renderer.h
+////
+#pragma once
+#include <GL/glew.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <string>
+#include <vector>
+
+class Renderer {
+public:
+  Renderer();
+  ~Renderer();
+
+  bool initialize(int width, int height);
+  void render(const glm::mat4 &view, const glm::mat4 &projection,
+              const glm::mat4 &model = glm::mat4(1.0f));
+  void cleanup();
+
+  void setModelData(const std::vector<float> &vertices,
+                    const std::vector<unsigned int> &indices);
+
+private:
+  GLuint shaderProgram;
+  GLuint VAO, VBO, EBO;
+
+  size_t indexCount;
+
+  GLuint compileShader(const std::string &source, GLenum type);
+  GLuint createShaderProgram(const std::string &vertexSource,
+                             const std::string &fragmentSource);
+
+  static const std::string vertexShaderSource;
+  static const std::string fragmentShaderSource;
+};
+
+////
+//// spatial_index.h
+////
+#pragma once
+#include <glm/glm.hpp>
+#include <memory>
+#include <vector>
+
+struct Triangle {
+  glm::vec3 v0, v1, v2;
+  glm::vec3 normal;
+  unsigned int id;
+};
+
+struct BoundingBox {
+  glm::vec3 min;
+  glm::vec3 max;
+
+  BoundingBox() : min(glm::vec3(FLT_MAX)), max(glm::vec3(-FLT_MAX)) {}
+  BoundingBox(const glm::vec3 &min, const glm::vec3 &max)
+      : min(min), max(max) {}
+
+  void expand(const glm::vec3 &point) {
+    min = glm::min(min, point);
+    max = glm::max(max, point);
+  }
+
+  void expand(const BoundingBox &box) {
+    min = glm::min(min, box.min);
+    max = glm::max(max, box.max);
+  }
+
+  glm::vec3 centroid() const { return (min + max) * 0.5f; }
+
+  float surfaceArea() const {
+    glm::vec3 d = max - min;
+    return 2.0f * (d.x * d.y + d.y * d.z + d.z * d.x);
+  }
+
+  bool intersect(const glm::vec3 &origin, const glm::vec3 &direction,
+                 float tMin, float tMax) const {
+    for (int i = 0; i < 3; i++) {
+      float invD = 1.0f / direction[i];
+      float t0 = (min[i] - origin[i]) * invD;
+      float t1 = (max[i] - origin[i]) * invD;
+      if (invD < 0.0f)
+        std::swap(t0, t1);
+      tMin = t0 > tMin ? t0 : tMin;
+      tMax = t1 < tMax ? t1 : tMax;
+      if (tMax <= tMin)
+        return false;
+    }
+    return true;
+  }
+};
+
+struct Ray {
+  glm::vec3 origin;
+  glm::vec3 direction;
+  float tMin = 0.001f;
+  float tMax = 10000.0f;
+};
+
+struct RayHit {
+  bool hit = false;
+  float distance = FLT_MAX;
+  glm::vec3 point;
+  glm::vec3 normal;
+  unsigned int triangleId = 0;
+};
+
+struct BVHNode {
+  BoundingBox bounds;
+  std::unique_ptr<BVHNode> left;
+  std::unique_ptr<BVHNode> right;
+  std::vector<unsigned int> triangleIndices;
+  bool isLeaf = false;
+};
+
+struct Building {
+  std::vector<unsigned int> triangleIndices;
+  BoundingBox bounds;
+  glm::vec3 centroid;
+  float height;
+};
+
+class SpatialIndex {
+public:
+  SpatialIndex();
+  ~SpatialIndex();
+
+  void build(const std::vector<Triangle> &triangles);
+  RayHit intersect(const Ray &ray) const;
+  bool intersectAny(const Ray &ray) const;
+
+  // Serialization
+  bool saveBVH(const std::string &filename) const;
+  bool loadBVH(const std::string &filename);
+
+  const std::vector<Triangle> &getTriangles() const { return m_triangles; }
+  const BoundingBox &getBounds() const { return m_sceneBounds; }
+  const std::vector<Building> &getBuildings() const { return m_buildings; }
+
+  void extractBuildings();
+  void printStats() const;
+
+private:
+  std::vector<Triangle> m_triangles;
+  std::unique_ptr<BVHNode> m_root;
+  BoundingBox m_sceneBounds;
+  std::vector<Building> m_buildings;
+
+  std::unique_ptr<BVHNode> buildBVH(std::vector<unsigned int> &triangleIndices,
+                                    int depth);
+  RayHit intersectBVH(const BVHNode *node, const Ray &ray) const;
+  bool intersectAnyBVH(const BVHNode *node, const Ray &ray) const;
+  bool intersectTriangle(const Ray &ray, const Triangle &tri, float &t,
+                         glm::vec3 &hitPoint) const;
+
+  // Serialization helpers
+  void serializeBVHNode(std::ofstream &out, const BVHNode *node) const;
+  std::unique_ptr<BVHNode> deserializeBVHNode(std::ifstream &in);
+};
+
+
+////
+//// ui_manager.h
+////
+#pragma once
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <string>
+
+class Camera;
+class NodeManager;
+
+class UIManager {
+public:
+  UIManager();
+  ~UIManager();
+
+  // Initialize ImGui context and backends
+  bool initialize(GLFWwindow *window,
+                  const char *glsl_version = "#version 330");
+
+  // Begin new ImGui frame
+  void beginFrame();
+
+  // Render all UI windows
+  void render(const Camera &camera, float fps, float deltaTime,
+              NodeManager *nodeManager = nullptr);
+
+  // End frame and render ImGui
+  void endFrame();
+
+  // Cleanup ImGui resources
+  void cleanup();
+
+  // Check if mouse is over any ImGui window
+  bool wantCaptureMouse() const;
+
+  // Check if keyboard is captured by ImGui
+  bool wantCaptureKeyboard() const;
+
+  // Set whether mouse look mode is active (disables ImGui input capture)
+  void setMouseLookMode(bool enabled);
+
+  // UI state
+  struct UIState {
+    bool showControlPanel = true;
+    bool showAboutWindow = false;
+    bool showDemoWindow = false;
+    bool showPerformanceWindow = true;
+    bool showNodePanel = true;
+  } state;
+
+private:
+  void renderControlPanel(const Camera &camera, float fps, float deltaTime);
+  void renderAboutWindow();
+  void renderPerformanceWindow(float fps, float deltaTime);
+  void renderNodePanel(NodeManager *nodeManager);
+
+  bool initialized = false;
+  GLFWwindow *window = nullptr;
+
+  // Performance tracking
+  static const int FPS_SAMPLE_COUNT = 60;
+  float fpsHistory[FPS_SAMPLE_COUNT] = {0};
+  int fpsHistoryIndex = 0;
+};
+
+
+////
+//// camera.cpp
+////
+#include "camera.h"
+
+#include <algorithm>
+
+Camera::Camera(float fov, float aspect, float near, float far)
+    : position(glm::vec3(0.0f, 100.0f, 500.0f)),
+      front(glm::vec3(0.0f, 0.0f, -1.0f)), worldUp(glm::vec3(0.0f, 1.0f, 0.0f)),
+      yaw(-90.0f), pitch(-10.0f), movementSpeed(250.0f), mouseSensitivity(0.1f),
+      zoom(45.0f), fov(fov), aspectRatio(aspect), nearPlane(near),
+      farPlane(far) {
+  updateCameraVectors();
+  updateProjectionMatrix();
+}
+
+void Camera::processInput(GLFWwindow *window, float deltaTime) {
+  float velocity = movementSpeed * deltaTime;
+
+  if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+    velocity *= 3.0f;
+  }
+
+  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    position += front * velocity;
+  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    position -= front * velocity;
+  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    position -= right * velocity;
+  if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    position += right * velocity;
+  if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+    position += worldUp * velocity;
+  if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+    position -= worldUp * velocity;
+}
+
+void Camera::processMouseMovement(float xoffset, float yoffset,
+                                  bool constrainPitch) {
+  xoffset *= mouseSensitivity;
+  yoffset *= mouseSensitivity;
+
+  yaw += xoffset;
+  pitch += yoffset;
+
+  if (constrainPitch) {
+    if (pitch > 89.0f)
+      pitch = 89.0f;
+    if (pitch < -89.0f)
+      pitch = -89.0f;
+  }
+
+  updateCameraVectors();
+}
+
+void Camera::processMouseScroll(float yoffset) {
+  zoom -= yoffset;
+  if (zoom < 1.0f)
+    zoom = 1.0f;
+  if (zoom > 45.0f)
+    zoom = 45.0f;
+}
+
+glm::mat4 Camera::getViewMatrix() const {
+  return glm::lookAt(position, position + front, up);
+}
+
+glm::mat4 Camera::getProjectionMatrix() const { return projectionMatrix; }
+
+void Camera::updateCameraVectors() {
+  glm::vec3 newFront;
+  newFront.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+  newFront.y = sin(glm::radians(pitch));
+  newFront.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+  front = glm::normalize(newFront);
+
+  right = glm::normalize(glm::cross(front, worldUp));
+  up = glm::normalize(glm::cross(right, front));
+}
+
+void Camera::updateProjectionMatrix() {
+  projectionMatrix =
+      glm::perspective(glm::radians(zoom), aspectRatio, nearPlane, farPlane);
+}
+
+////
+//// main.cpp
+////
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
+
+#include "camera.h"
+#include "model_loader.h"
+#include "node_manager.h"
+#include "node_renderer.h"
+#include "radio_system.h"
+#include "renderer.h"
+#include "spatial_index.h"
+#include "ui_manager.h"
+
+Camera camera(45.0f, 1920.0f / 1080.0f, 0.1f, 10000.0f);
+float lastX = 960.0f;
+float lastY = 540.0f;
+bool firstMouse = true;
+bool mouseEnabled = false;
+
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
+
+int windowWidth = 1920;
+int windowHeight = 1080;
+
+struct AppState {
+  UIManager *uiManager = nullptr;
+  NodeManager *nodeManager = nullptr;
+  SpatialIndex *spatialIndex = nullptr;
+
+  bool showPlacementPreview = false;
+  glm::vec3 placementPreviewPos = glm::vec3(0.0f);
+};
+
+void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
+  windowWidth = width;
+  windowHeight = height;
+  glViewport(0, 0, width, height);
+  camera.setAspectRatio((float)width / (float)height);
+}
+
+void mouse_callback(GLFWwindow *window, double xpos, double ypos) {}
+
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+  camera.processMouseScroll(static_cast<float>(yoffset));
+}
+
+void mouse_button_callback(GLFWwindow *window, int button, int action,
+                           int mods) {
+  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+    AppState *appState =
+        static_cast<AppState *>(glfwGetWindowUserPointer(window));
+    if (!appState || !appState->nodeManager || !appState->uiManager)
+      return;
+
+    if (appState->uiManager->wantCaptureMouse())
+      return;
+
+    if (mouseEnabled)
+      return;
+
+    double xpos, ypos;
+    glfwGetCursorPos(window, &xpos, &ypos);
+
+    glm::vec3 rayOrigin, rayDirection;
+    NodeManager::screenToWorldRay((int)xpos, (int)ypos, windowWidth,
+                                  windowHeight, camera, rayOrigin,
+                                  rayDirection);
+
+    if (appState->nodeManager->isPlacementMode()) {
+      bool hit;
+      glm::vec3 position = appState->nodeManager->pickPosition(
+          rayOrigin, rayDirection, appState->spatialIndex, hit);
+
+      NodeType type = appState->nodeManager->getPlacementType();
+      appState->nodeManager->createNode(position, 2.4e9f, 20.0f, type);
+
+      appState->showPlacementPreview = false;
+    } else {
+      int nodeId = appState->nodeManager->pickNode(rayOrigin, rayDirection);
+      if (nodeId >= 0) {
+        appState->nodeManager->selectNode(nodeId);
+      } else {
+        appState->nodeManager->deselectAll();
+      }
+    }
+  }
+}
+
+void key_callback(GLFWwindow *window, int key, int scancode, int action,
+                  int mods) {
+  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+    glfwSetWindowShouldClose(window, true);
+  }
+
+  if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
+    mouseEnabled = !mouseEnabled;
+    AppState *appState =
+        static_cast<AppState *>(glfwGetWindowUserPointer(window));
+    if (mouseEnabled) {
+      glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+      firstMouse = true;
+      if (appState && appState->uiManager) {
+        appState->uiManager->setMouseLookMode(true);
+      }
+    } else {
+      glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+      if (appState && appState->uiManager) {
+        appState->uiManager->setMouseLookMode(false);
+      }
+    }
+  }
+}
+
+void printControls() {
+  std::cout << "\n=== Radio Wave Visualization - Controls ===" << std::endl;
+  std::cout << "ESC     - Exit application" << std::endl;
+  std::cout << "TAB     - Toggle mouse look" << std::endl;
+  std::cout << "WASD    - Move camera (forward/back/left/right)" << std::endl;
+  std::cout << "Q/E     - Move camera up/down" << std::endl;
+  std::cout << "SHIFT   - Speed boost" << std::endl;
+  std::cout << "Mouse   - Look around (when mouse look enabled)" << std::endl;
+  std::cout << "Scroll  - Zoom in/out" << std::endl;
+  std::cout << "==========================================\\n" << std::endl;
+}
+
+int main() {
+  if (!glfwInit()) {
+    std::cerr << "Failed to initialize GLFW" << std::endl;
+    return -1;
+  }
+
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+  GLFWwindow *window = glfwCreateWindow(windowWidth, windowHeight,
+                                        "Radio Wave Visualization - Hong Kong",
+                                        nullptr, nullptr);
+  if (!window) {
+    std::cerr << "Failed to create GLFW window" << std::endl;
+    glfwTerminate();
+    return -1;
+  }
+
+  glfwMakeContextCurrent(window);
+
+  glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+  glfwSetCursorPosCallback(window, mouse_callback);
+  glfwSetScrollCallback(window, scroll_callback);
+  glfwSetMouseButtonCallback(window, mouse_button_callback);
+  glfwSetKeyCallback(window, key_callback);
+
+  if (glewInit() != GLEW_OK) {
+    std::cerr << "Failed to initialize GLEW" << std::endl;
+    return -1;
+  }
+
+  std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
+  std::cout << "GLSL Version: " << glGetString(GL_SHADING_LANGUAGE_VERSION)
+            << std::endl;
+
+  printControls();
+
+  UIManager uiManager;
+  if (!uiManager.initialize(window, "#version 330")) {
+    std::cerr << "Failed to initialize UI Manager" << std::endl;
+    return -1;
+  }
+
+  Renderer renderer;
+  if (!renderer.initialize(windowWidth, windowHeight)) {
+    std::cerr << "Failed to initialize renderer" << std::endl;
+    return -1;
+  }
+
+  std::cout << "Loading Hong Kong city model..." << std::endl;
+  ModelData modelData = ModelLoader::loadOBJ("hongkong.obj");
+
+  if (!modelData.loaded) {
+    std::cerr << "Failed to load model" << std::endl;
+    return -1;
+  }
+
+  std::cout << "Model loaded successfully!" << std::endl;
+  std::cout << "Vertices: " << modelData.vertices.size() / 6 << std::endl;
+  std::cout << "Triangles: " << modelData.indices.size() / 3 << std::endl;
+
+  renderer.setModelData(modelData.vertices, modelData.indices);
+
+  std::cout << "Initializing spatial index..." << std::endl;
+  SpatialIndex spatialIndex;
+
+  const std::string bvhCacheFile = "hongkong.bvh";
+  bool bvhLoaded = spatialIndex.loadBVH(bvhCacheFile);
+
+  if (!bvhLoaded) {
+    std::cout << "Building spatial index from scratch..." << std::endl;
+
+    std::vector<Triangle> triangles;
+    for (size_t i = 0; i < modelData.indices.size(); i += 3) {
+      Triangle tri;
+      unsigned int i0 = modelData.indices[i];
+      unsigned int i1 = modelData.indices[i + 1];
+      unsigned int i2 = modelData.indices[i + 2];
+
+      tri.v0 = glm::vec3(modelData.vertices[i0 * 6 + 0],
+                         modelData.vertices[i0 * 6 + 1],
+                         modelData.vertices[i0 * 6 + 2]);
+      tri.v1 = glm::vec3(modelData.vertices[i1 * 6 + 0],
+                         modelData.vertices[i1 * 6 + 1],
+                         modelData.vertices[i1 * 6 + 2]);
+      tri.v2 = glm::vec3(modelData.vertices[i2 * 6 + 0],
+                         modelData.vertices[i2 * 6 + 1],
+                         modelData.vertices[i2 * 6 + 2]);
+
+      glm::vec3 edge1 = tri.v1 - tri.v0;
+      glm::vec3 edge2 = tri.v2 - tri.v0;
+      tri.normal = glm::normalize(glm::cross(edge1, edge2));
+      tri.id = i / 3;
+
+      triangles.push_back(tri);
+    }
+
+    spatialIndex.build(triangles);
+
+    std::cout << "Saving BVH to cache..." << std::endl;
+    spatialIndex.saveBVH(bvhCacheFile);
+  }
+
+  std::cout << "Spatial index ready!" << std::endl;
+
+  RadioSystem radioSystem;
+  NodeManager nodeManager(radioSystem);
+
+  NodeRenderer nodeRenderer;
+  if (!nodeRenderer.initialize()) {
+    std::cerr << "Failed to initialize node renderer" << std::endl;
+    return -1;
+  }
+
+  nodeManager.createNode(glm::vec3(100.0f, 150.0f, 100.0f), 2.4e9f, 20.0f,
+                         NodeType::TRANSMITTER);
+  nodeManager.createNode(glm::vec3(-100.0f, 120.0f, -100.0f), 2.4e9f, 20.0f,
+                         NodeType::RECEIVER);
+
+  AppState appState;
+  appState.uiManager = &uiManager;
+  appState.nodeManager = &nodeManager;
+  appState.spatialIndex = &spatialIndex;
+  glfwSetWindowUserPointer(window, &appState);
+
+  std::cout << "\\nStarting render loop. Press TAB to enable mouse look."
+            << std::endl;
+
+  while (!glfwWindowShouldClose(window)) {
+    float currentFrame = static_cast<float>(glfwGetTime());
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+
+    float fps = (deltaTime > 0.0f) ? (1.0f / deltaTime) : 0.0f;
+
+    if (mouseEnabled) {
+      double xpos, ypos;
+      glfwGetCursorPos(window, &xpos, &ypos);
+
+      float xposf = static_cast<float>(xpos);
+      float yposf = static_cast<float>(ypos);
+
+      if (firstMouse) {
+        lastX = xposf;
+        lastY = yposf;
+        firstMouse = false;
+      }
+
+      float xoffset = xposf - lastX;
+      float yoffset = lastY - yposf;
+
+      lastX = xposf;
+      lastY = yposf;
+
+      if (xoffset != 0.0f || yoffset != 0.0f) {
+        camera.processMouseMovement(xoffset, yoffset);
+      }
+    }
+
+    camera.processInput(window, deltaTime);
+
+    if (nodeManager.isPlacementMode() && !mouseEnabled &&
+        !uiManager.wantCaptureMouse()) {
+      double xpos, ypos;
+      glfwGetCursorPos(window, &xpos, &ypos);
+
+      glm::vec3 rayOrigin, rayDirection;
+      NodeManager::screenToWorldRay((int)xpos, (int)ypos, windowWidth,
+                                    windowHeight, camera, rayOrigin,
+                                    rayDirection);
+
+      bool hit;
+      glm::vec3 position =
+          nodeManager.pickPosition(rayOrigin, rayDirection, &spatialIndex, hit);
+
+      appState.placementPreviewPos = position;
+      appState.showPlacementPreview = true;
+    } else {
+      appState.showPlacementPreview = false;
+    }
+
+    glm::mat4 view = camera.getViewMatrix();
+    glm::mat4 projection = camera.getProjectionMatrix();
+    glm::mat4 model = glm::mat4(1.0f);
+
+    renderer.render(view, projection, model);
+
+    nodeRenderer.render(radioSystem, view, projection);
+
+    if (appState.showPlacementPreview) {
+      glm::vec3 previewColor;
+      NodeType placementType = nodeManager.getPlacementType();
+      switch (placementType) {
+      case NodeType::TRANSMITTER:
+        previewColor = glm::vec3(1.0f, 0.3f, 0.3f);
+        break;
+      case NodeType::RECEIVER:
+        previewColor = glm::vec3(0.3f, 1.0f, 0.3f);
+        break;
+      case NodeType::RELAY:
+        previewColor = glm::vec3(0.3f, 0.3f, 1.0f);
+        break;
+      }
+      nodeRenderer.renderPlacementPreview(appState.placementPreviewPos,
+                                          previewColor, view, projection);
+    }
+
+    uiManager.beginFrame();
+    uiManager.render(camera, fps, deltaTime, &nodeManager);
+    uiManager.endFrame();
+
+    glfwSwapBuffers(window);
+    glfwPollEvents();
+  }
+
+  renderer.cleanup();
+  nodeRenderer.cleanup();
+  uiManager.cleanup();
+  glfwTerminate();
+
+  std::cout << "Application closed successfully." << std::endl;
+  return 0;
+}
+
+////
+//// model_loader.cpp
+////
+#include "model_loader.h"
+
+#include <fstream>
+#include <glm/glm.hpp>
+#include <iostream>
+#include <sstream>
+#include <unordered_map>
+
+ModelData ModelLoader::loadOBJ(const std::string &filepath) {
+  ModelData data;
+  std::ifstream file(filepath);
+
+  if (!file.is_open()) {
+    std::cerr << "Failed to open OBJ file: " << filepath << std::endl;
+    return {};
+  }
+
+  std::cout << "Loading OBJ model: " << filepath << std::endl;
+
+  std::vector<std::string> lines;
+  std::string line;
+  while (std::getline(file, line)) {
+    lines.push_back(std::move(line));
+  }
+  file.close();
+
+  std::vector<int> line_types(lines.size());
+  std::vector<size_t> v_indices, vn_indices, f_indices;
+
+  for (size_t i = 0; i < lines.size(); i++) {
+    const std::string &line = lines[i];
+    if (line.empty()) continue;
+    if (line[0] == 'v' && line.size() > 1) {
+      if (line[1] == 'n') {
+        line_types[i] = 2;
+        vn_indices.push_back(i);
+      } else if (line[1] == ' ') {
+        line_types[i] = 1;
+        v_indices.push_back(i);
+      }
+    } else if (line[0] == 'f' && line.size() > 1 && line[1] == ' ') {
+      line_types[i] = 3;
+      f_indices.push_back(i);
+    }
+  }
+
+  std::vector<glm::vec3> temp_vertices(v_indices.size());
+  std::vector<glm::vec3> temp_normals(vn_indices.size());
+  std::vector<unsigned int> vertex_indices(f_indices.size() * 3);
+  std::vector<unsigned int> normal_indices(f_indices.size() * 3);
+
+  #pragma omp parallel for
+  for (size_t i = 0; i < v_indices.size(); i++) {
+    std::istringstream iss(lines[v_indices[i]]);
+    std::string prefix;
+    float x, y, z;
+    iss >> prefix >> x >> y >> z;
+    temp_vertices[i] = glm::vec3(x, y, z);
+  }
+
+  #pragma omp parallel for
+  for (size_t i = 0; i < vn_indices.size(); i++) {
+    std::istringstream iss(lines[vn_indices[i]]);
+    std::string prefix;
+    float nx, ny, nz;
+    iss >> prefix >> nx >> ny >> nz;
+    temp_normals[i] = glm::vec3(nx, ny, nz);
+  }
+
+  auto parse_face_vertex = [](const std::string &vertex_str) -> std::pair<int, int> {
+    size_t first_slash = vertex_str.find('/');
+    int v_idx = std::stoi(vertex_str.substr(0, first_slash)) - 1;
+
+    int n_idx = -1;
+    if (first_slash != std::string::npos) {
+      size_t second_slash = vertex_str.find('/', first_slash + 1);
+      if (second_slash != std::string::npos &&
+          second_slash + 1 < vertex_str.length()) {
+        n_idx = std::stoi(vertex_str.substr(second_slash + 1)) - 1;
+      }
+    }
+    return {v_idx, n_idx};
+  };
+
+  #pragma omp parallel for
+  for (size_t i = 0; i < f_indices.size(); i++) {
+    std::istringstream iss(lines[f_indices[i]]);
+    std::string prefix, vertex1, vertex2, vertex3;
+    iss >> prefix >> vertex1 >> vertex2 >> vertex3;
+
+    auto [v1, n1] = parse_face_vertex(vertex1);
+    auto [v2, n2] = parse_face_vertex(vertex2);
+    auto [v3, n3] = parse_face_vertex(vertex3);
+
+    vertex_indices[i * 3 + 0] = v1;
+    vertex_indices[i * 3 + 1] = v2;
+    vertex_indices[i * 3 + 2] = v3;
+
+    normal_indices[i * 3 + 0] = n1;
+    normal_indices[i * 3 + 1] = n2;
+    normal_indices[i * 3 + 2] = n3;
+  }
+
+  std::cout << "Loaded " << temp_vertices.size() << " vertices, "
+            << vertex_indices.size() / 3 << " triangles" << std::endl;
+
+  bool has_normals = !temp_normals.empty() && normal_indices[0] >= 0;
+
+  if (!has_normals) {
+    std::cout << "No normals found, generating flat normals..." << std::endl;
+  }
+
+  for (size_t i = 0; i < vertex_indices.size(); i += 3) {
+    glm::vec3 v0 = temp_vertices[vertex_indices[i]];
+    glm::vec3 v1 = temp_vertices[vertex_indices[i + 1]];
+    glm::vec3 v2 = temp_vertices[vertex_indices[i + 2]];
+
+    glm::vec3 normal;
+    if (has_normals) {
+      glm::vec3 n0 = (normal_indices[i] >= 0) ? temp_normals[normal_indices[i]]
+                                              : glm::vec3(0, 1, 0);
+      glm::vec3 n1 = (normal_indices[i + 1] >= 0)
+                         ? temp_normals[normal_indices[i + 1]]
+                         : glm::vec3(0, 1, 0);
+      glm::vec3 n2 = (normal_indices[i + 2] >= 0)
+                         ? temp_normals[normal_indices[i + 2]]
+                         : glm::vec3(0, 1, 0);
+      normal = glm::normalize(n0 + n1 + n2);
+    } else {
+      glm::vec3 edge1 = v1 - v0;
+      glm::vec3 edge2 = v2 - v0;
+      normal = glm::normalize(glm::cross(edge1, edge2));
+    }
+
+    for (int j = 0; j < 3; j++) {
+      glm::vec3 vertex = (j == 0) ? v0 : (j == 1) ? v1 : v2;
+
+      data.vertices.push_back(vertex.x);
+      data.vertices.push_back(vertex.y);
+      data.vertices.push_back(vertex.z);
+
+      data.vertices.push_back(normal.x);
+      data.vertices.push_back(normal.y);
+      data.vertices.push_back(normal.z);
+
+      data.indices.push_back(static_cast<unsigned int>(data.indices.size()));
+    }
+  }
+
+  data.loaded = true;
+  std::cout << "OBJ model loaded successfully!" << std::endl;
+  std::cout << "Final vertex count: " << data.vertices.size() / 6 << std::endl;
+  std::cout << "Triangle count: " << data.indices.size() / 3 << std::endl;
+
+  return data;
+}
+
+
+////
+//// node_manager.cpp
+////
+#include "node_manager.h"
+#include "camera.h"
+#include "spatial_index.h"
+#include <algorithm>
+#include <limits>
+
+NodeManager::NodeManager(RadioSystem &rs)
+    : radioSystem(rs), selectedNodeId(-1), placementMode(false),
+      placementNodeType(NodeType::TRANSMITTER) {}
+
+NodeManager::~NodeManager() {}
+
+int NodeManager::createNode(const glm::vec3 &position, float frequency,
+                            float power, NodeType type) {
+  int id = radioSystem.addSource(position, frequency, power, type);
+  return id;
+}
+
+void NodeManager::deleteNode(int id) {
+  if (selectedNodeId == id) {
+    selectedNodeId = -1;
+  }
+  radioSystem.removeSource(id);
+}
+
+void NodeManager::deleteSelectedNode() {
+  if (selectedNodeId >= 0) {
+    deleteNode(selectedNodeId);
+  }
+}
+
+void NodeManager::selectNode(int id) {
+  if (selectedNodeId >= 0) {
+    RadioSource *prevNode = radioSystem.getSourceById(selectedNodeId);
+    if (prevNode) {
+      prevNode->selected = false;
+    }
+  }
+
+  selectedNodeId = id;
+  RadioSource *node = radioSystem.getSourceById(id);
+  if (node) {
+    node->selected = true;
+  }
+}
+
+void NodeManager::deselectAll() {
+  if (selectedNodeId >= 0) {
+    RadioSource *node = radioSystem.getSourceById(selectedNodeId);
+    if (node) {
+      node->selected = false;
+    }
+    selectedNodeId = -1;
+  }
+}
+
+RadioSource *NodeManager::getSelectedNode() {
+  if (selectedNodeId < 0)
+    return nullptr;
+  return radioSystem.getSourceById(selectedNodeId);
+}
+
+void NodeManager::moveSelectedNode(const glm::vec3 &newPosition) {
+  if (selectedNodeId >= 0) {
+    setNodePosition(selectedNodeId, newPosition);
+  }
+}
+
+void NodeManager::setNodePosition(int id, const glm::vec3 &position) {
+  RadioSource *node = radioSystem.getSourceById(id);
+  if (node) {
+    node->position = position;
+  }
+}
+
+int NodeManager::pickNode(const glm::vec3 &rayOrigin,
+                          const glm::vec3 &rayDirection, float maxDistance) {
+  const float pickRadius = 10.0f;
+  float closestDistance = maxDistance;
+  int closestNodeId = -1;
+
+  const auto &nodes = radioSystem.getSources();
+  for (const auto &node : nodes) {
+    if (!node.visible)
+      continue;
+
+    float distance;
+    if (raySphereIntersect(rayOrigin, rayDirection, node.position, pickRadius,
+                           distance)) {
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestNodeId = node.id;
+      }
+    }
+  }
+
+  return closestNodeId;
+}
+
+glm::vec3 NodeManager::pickPosition(const glm::vec3 &rayOrigin,
+                                    const glm::vec3 &rayDirection,
+                                    const SpatialIndex *spatialIndex,
+                                    bool &hit) {
+  hit = false;
+
+  if (spatialIndex) {
+    Ray ray;
+    ray.origin = rayOrigin;
+    ray.direction = rayDirection;
+    ray.tMin = 0.1f;
+    ray.tMax = 10000.0f;
+
+    RayHit rayHit = spatialIndex->intersect(ray);
+    if (rayHit.hit) {
+      hit = true;
+      return rayHit.point + rayHit.normal * 5.0f;
+    }
+  }
+
+  return rayOrigin + rayDirection * 500.0f;
+}
+
+void NodeManager::screenToWorldRay(int mouseX, int mouseY, int screenWidth,
+                                   int screenHeight, const Camera &camera,
+                                   glm::vec3 &rayOrigin,
+                                   glm::vec3 &rayDirection) {
+  float x = (2.0f * mouseX) / screenWidth - 1.0f;
+  float y = 1.0f - (2.0f * mouseY) / screenHeight;
+
+  glm::vec4 rayClip(x, y, -1.0f, 1.0f);
+
+  glm::mat4 projMatrix = camera.getProjectionMatrix();
+  glm::vec4 rayEye = glm::inverse(projMatrix) * rayClip;
+  rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
+
+  glm::mat4 viewMatrix = camera.getViewMatrix();
+  glm::vec4 rayWorld = glm::inverse(viewMatrix) * rayEye;
+  rayDirection = glm::normalize(glm::vec3(rayWorld));
+
+  rayOrigin = camera.getPosition();
+}
+
+void NodeManager::update(float deltaTime) {}
+
+bool NodeManager::raySphereIntersect(const glm::vec3 &rayOrigin,
+                                     const glm::vec3 &rayDirection,
+                                     const glm::vec3 &sphereCenter,
+                                     float sphereRadius, float &distance) {
+  glm::vec3 oc = rayOrigin - sphereCenter;
+  float a = glm::dot(rayDirection, rayDirection);
+  float b = 2.0f * glm::dot(oc, rayDirection);
+  float c = glm::dot(oc, oc) - sphereRadius * sphereRadius;
+  float discriminant = b * b - 4.0f * a * c;
+
+  if (discriminant < 0.0f) {
+    return false;
+  }
+
+  float t = (-b - sqrt(discriminant)) / (2.0f * a);
+  if (t < 0.0f) {
+    t = (-b + sqrt(discriminant)) / (2.0f * a);
+  }
+
+  if (t < 0.0f) {
+    return false;
+  }
+
+  distance = t;
+  return true;
+}
+
+
+////
+//// node_renderer.cpp
+////
+#include "node_renderer.h"
+#include "radio_system.h"
+#include <GLFW/glfw3.h>
+#include <cmath>
+#include <iostream>
+
+const std::string NodeRenderer::nodeVertexShader = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+out vec3 FragPos;
+out vec3 Normal;
+
+void main() {
+    FragPos = vec3(model * vec4(aPos, 1.0));
+    Normal = mat3(transpose(inverse(model))) * aNormal;
+    gl_Position = projection * view * vec4(FragPos, 1.0);
+}
+)";
+
+const std::string NodeRenderer::nodeFragmentShader = R"(
+#version 330 core
+out vec4 FragColor;
+
+in vec3 FragPos;
+in vec3 Normal;
+
+uniform vec3 nodeColor;
+uniform bool isSelected;
+uniform vec3 lightPos;
+uniform vec3 viewPos;
+
+void main() {
+    float ambientStrength = 0.3;
+    vec3 ambient = ambientStrength * nodeColor;
+    
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(lightPos - FragPos);
+    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 diffuse = diff * nodeColor;
+    
+    float specularStrength = 0.5;
+    vec3 viewDir = normalize(viewPos - FragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+    vec3 specular = specularStrength * spec * vec3(1.0);
+    
+    vec3 result = ambient + diffuse + specular;
+    
+    if (isSelected) {
+        result = mix(result, vec3(1.0, 1.0, 0.0), 0.4);
+    }
+    
+    FragColor = vec4(result, 1.0);
+}
+)";
+
+NodeRenderer::NodeRenderer()
+    : nodeShaderProgram(0), sphereVAO(0), sphereVBO(0), sphereEBO(0),
+      sphereIndexCount(0) {}
+
+NodeRenderer::~NodeRenderer() { cleanup(); }
+
+bool NodeRenderer::initialize() {
+  nodeShaderProgram = createShaderProgram(nodeVertexShader, nodeFragmentShader);
+  if (nodeShaderProgram == 0) {
+    std::cerr << "Failed to create node shader program" << std::endl;
+    return false;
+  }
+
+  createSphere(8.0f, 16);
+
+  std::cout << "NodeRenderer initialized" << std::endl;
+  return true;
+}
+
+void NodeRenderer::createSphere(float radius, int segments) {
+  std::vector<float> vertices;
+  std::vector<unsigned int> indices;
+
+  for (int lat = 0; lat <= segments; lat++) {
+    float theta = lat * M_PI / segments;
+    float sinTheta = sin(theta);
+    float cosTheta = cos(theta);
+
+    for (int lon = 0; lon <= segments; lon++) {
+      float phi = lon * 2 * M_PI / segments;
+      float sinPhi = sin(phi);
+      float cosPhi = cos(phi);
+
+      float x = cosPhi * sinTheta;
+      float y = cosTheta;
+      float z = sinPhi * sinTheta;
+
+      vertices.push_back(radius * x);
+      vertices.push_back(radius * y);
+      vertices.push_back(radius * z);
+
+      vertices.push_back(x);
+      vertices.push_back(y);
+      vertices.push_back(z);
+    }
+  }
+
+  for (int lat = 0; lat < segments; lat++) {
+    for (int lon = 0; lon < segments; lon++) {
+      int first = (lat * (segments + 1)) + lon;
+      int second = first + segments + 1;
+
+      indices.push_back(first);
+      indices.push_back(second);
+      indices.push_back(first + 1);
+
+      indices.push_back(second);
+      indices.push_back(second + 1);
+      indices.push_back(first + 1);
+    }
+  }
+
+  sphereIndexCount = indices.size();
+
+  glGenVertexArrays(1, &sphereVAO);
+  glGenBuffers(1, &sphereVBO);
+  glGenBuffers(1, &sphereEBO);
+
+  glBindVertexArray(sphereVAO);
+
+  glBindBuffer(GL_ARRAY_BUFFER, sphereVBO);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float),
+               vertices.data(), GL_STATIC_DRAW);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereEBO);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int),
+               indices.data(), GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+                        (void *)(3 * sizeof(float)));
+  glEnableVertexAttribArray(1);
+
+  glBindVertexArray(0);
+}
+
+void NodeRenderer::render(const RadioSystem &radioSystem, const glm::mat4 &view,
+                          const glm::mat4 &projection) {
+  glUseProgram(nodeShaderProgram);
+
+  GLint projLoc = glGetUniformLocation(nodeShaderProgram, "projection");
+  GLint viewLoc = glGetUniformLocation(nodeShaderProgram, "view");
+  glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projection[0][0]);
+  glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
+
+  glm::vec3 cameraPos = glm::vec3(glm::inverse(view)[3]);
+  GLint lightPosLoc = glGetUniformLocation(nodeShaderProgram, "lightPos");
+  GLint viewPosLoc = glGetUniformLocation(nodeShaderProgram, "viewPos");
+  glUniform3fv(lightPosLoc, 1, &cameraPos[0]);
+  glUniform3fv(viewPosLoc, 1, &cameraPos[0]);
+
+  const auto &sources = radioSystem.getSources();
+  for (const auto &node : sources) {
+    if (!node.visible)
+      continue;
+
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, node.position);
+
+    float scale = node.selected ? 1.2f : 1.0f;
+    model = glm::scale(model, glm::vec3(scale));
+
+    GLint modelLoc = glGetUniformLocation(nodeShaderProgram, "model");
+    GLint colorLoc = glGetUniformLocation(nodeShaderProgram, "nodeColor");
+    GLint selectedLoc = glGetUniformLocation(nodeShaderProgram, "isSelected");
+
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
+    glUniform3fv(colorLoc, 1, &node.color[0]);
+    glUniform1i(selectedLoc, node.selected ? 1 : 0);
+
+    glBindVertexArray(sphereVAO);
+    glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+  }
+
+  glBindVertexArray(0);
+  glUseProgram(0);
+}
+
+void NodeRenderer::renderPlacementPreview(const glm::vec3 &position,
+                                          const glm::vec3 &color,
+                                          const glm::mat4 &view,
+                                          const glm::mat4 &projection) {
+  glUseProgram(nodeShaderProgram);
+
+  GLint projLoc = glGetUniformLocation(nodeShaderProgram, "projection");
+  GLint viewLoc = glGetUniformLocation(nodeShaderProgram, "view");
+  glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projection[0][0]);
+  glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
+
+  glm::vec3 cameraPos = glm::vec3(glm::inverse(view)[3]);
+  GLint lightPosLoc = glGetUniformLocation(nodeShaderProgram, "lightPos");
+  GLint viewPosLoc = glGetUniformLocation(nodeShaderProgram, "viewPos");
+  glUniform3fv(lightPosLoc, 1, &cameraPos[0]);
+  glUniform3fv(viewPosLoc, 1, &cameraPos[0]);
+
+  float time = glfwGetTime();
+  float pulseScale = 1.0f + 0.1f * sin(time * 3.0f);
+
+  glm::mat4 model = glm::mat4(1.0f);
+  model = glm::translate(model, position);
+  model = glm::scale(model, glm::vec3(pulseScale));
+
+  GLint modelLoc = glGetUniformLocation(nodeShaderProgram, "model");
+  GLint colorLoc = glGetUniformLocation(nodeShaderProgram, "nodeColor");
+  GLint selectedLoc = glGetUniformLocation(nodeShaderProgram, "isSelected");
+
+  glm::vec3 previewColor = color * 0.7f + glm::vec3(0.3f);
+  glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
+  glUniform3fv(colorLoc, 1, &previewColor[0]);
+  glUniform1i(selectedLoc, 0);
+
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  glBindVertexArray(sphereVAO);
+  glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+
+  glDisable(GL_BLEND);
+  glBindVertexArray(0);
+  glUseProgram(0);
+}
+
+void NodeRenderer::cleanup() {
+  if (sphereVAO != 0) {
+    glDeleteVertexArrays(1, &sphereVAO);
+    sphereVAO = 0;
+  }
+  if (sphereVBO != 0) {
+    glDeleteBuffers(1, &sphereVBO);
+    sphereVBO = 0;
+  }
+  if (sphereEBO != 0) {
+    glDeleteBuffers(1, &sphereEBO);
+    sphereEBO = 0;
+  }
+  if (nodeShaderProgram != 0) {
+    glDeleteProgram(nodeShaderProgram);
+    nodeShaderProgram = 0;
+  }
+}
+
+GLuint NodeRenderer::compileShader(const std::string &source, GLenum type) {
+  GLuint shader = glCreateShader(type);
+  const char *src = source.c_str();
+  glShaderSource(shader, 1, &src, nullptr);
+  glCompileShader(shader);
+
+  GLint success;
+  glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+  if (!success) {
+    char infoLog[512];
+    glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+    std::cerr << "Shader compilation failed:\n" << infoLog << std::endl;
+    glDeleteShader(shader);
+    return 0;
+  }
+
+  return shader;
+}
+
+GLuint NodeRenderer::createShaderProgram(const std::string &vertexSource,
+                                         const std::string &fragmentSource) {
+  GLuint vertexShader = compileShader(vertexSource, GL_VERTEX_SHADER);
+  GLuint fragmentShader = compileShader(fragmentSource, GL_FRAGMENT_SHADER);
+
+  if (vertexShader == 0 || fragmentShader == 0) {
+    if (vertexShader != 0)
+      glDeleteShader(vertexShader);
+    if (fragmentShader != 0)
+      glDeleteShader(fragmentShader);
+    return 0;
+  }
+
+  GLuint program = glCreateProgram();
+  glAttachShader(program, vertexShader);
+  glAttachShader(program, fragmentShader);
+  glLinkProgram(program);
+
+  GLint success;
+  glGetProgramiv(program, GL_LINK_STATUS, &success);
+  if (!success) {
+    char infoLog[512];
+    glGetProgramInfoLog(program, 512, nullptr, infoLog);
+    std::cerr << "Shader program linking failed:\n" << infoLog << std::endl;
+    glDeleteProgram(program);
+    program = 0;
+  }
+
+  glDeleteShader(vertexShader);
+  glDeleteShader(fragmentShader);
+
+  return program;
+}
+
+
+////
+//// radio_system.cpp
+////
+#include "radio_system.h"
+#include "spatial_index.h"
+#include <algorithm>
+#include <cmath>
+#include <glm/gtc/constants.hpp>
+
+RadioSystem::RadioSystem()
+    : nextNodeId(1), raysPerSource(64), maxBounces(2), maxDistance(2000.0f) {}
+
+RadioSystem::~RadioSystem() {}
+
+int RadioSystem::addSource(const glm::vec3 &position, float frequency,
+                           float power, NodeType type) {
+  int id = nextNodeId++;
+  sources.emplace_back(id, position, frequency, power, type);
+  return id;
+}
+
+void RadioSystem::removeSource(int id) {
+  sources.erase(
+      std::remove_if(sources.begin(), sources.end(),
+                     [id](const RadioSource &s) { return s.id == id; }),
+      sources.end());
+}
+
+void RadioSystem::removeSourceByIndex(int index) {
+  if (index >= 0 && index < sources.size()) {
+    sources.erase(sources.begin() + index);
+  }
+}
+
+RadioSource *RadioSystem::getSourceById(int id) {
+  for (auto &source : sources) {
+    if (source.id == id) {
+      return &source;
+    }
+  }
+  return nullptr;
+}
+
+RadioSource *RadioSystem::getSourceByIndex(int index) {
+  if (index >= 0 && index < sources.size()) {
+    return &sources[index];
+  }
+  return nullptr;
+}
+
+void RadioSystem::update(float deltaTime) {}
+
+float RadioSystem::calculatePathLoss(float distance, float frequency) {
+  if (distance < 1.0f)
+    distance = 1.0f;
+
+  const float c = 299792458.0f;
+  float wavelength = c / frequency;
+
+  float fspl = 20.0f * log10(distance) + 20.0f * log10(frequency) - 147.55f;
+
+  float loss = fspl / 100.0f;
+  return expf(-loss);
+}
+
+float RadioSystem::calculateReflectionLoss(const glm::vec3 &normal) {
+  return 0.3f;
+}
+
+void RadioSystem::computeSignalPropagation(const SpatialIndex *spatialIndex) {
+  signalRays.clear();
+
+  if (!spatialIndex)
+    return;
+
+  for (const auto &source : sources) {
+    if (!source.active)
+      continue;
+
+    for (int i = 0; i < raysPerSource; i++) {
+      float theta = 2.0f * glm::pi<float>() * (i / (float)raysPerSource);
+      float phi = glm::pi<float>() * (0.5f + 0.4f * sin(theta * 3.0f));
+
+      glm::vec3 direction(sin(phi) * cos(theta), cos(phi),
+                          sin(phi) * sin(theta));
+
+      SignalRay ray;
+      ray.origin = source.position;
+      ray.direction = glm::normalize(direction);
+      ray.strength = 1.0f;
+      ray.bounces = 0;
+      ray.color = source.color;
+      ray.points.push_back(source.position);
+
+      glm::vec3 currentPos = source.position;
+      glm::vec3 currentDir = ray.direction;
+      float currentStrength = 1.0f;
+
+      for (int bounce = 0; bounce <= maxBounces; bounce++) {
+        Ray testRay;
+        testRay.origin = currentPos;
+        testRay.direction = currentDir;
+        testRay.tMin = 0.1f;
+        testRay.tMax = maxDistance;
+
+        RayHit hit = spatialIndex->intersect(testRay);
+
+        if (hit.hit && hit.distance < maxDistance) {
+          glm::vec3 hitPoint = hit.point;
+          ray.points.push_back(hitPoint);
+
+          float distanceLoss =
+              calculatePathLoss(hit.distance, source.frequency);
+          currentStrength *= distanceLoss;
+
+          if (bounce < maxBounces && currentStrength > 0.01f) {
+            float reflectionLoss = calculateReflectionLoss(hit.normal);
+            currentStrength *= reflectionLoss;
+
+            glm::vec3 reflected = glm::reflect(currentDir, hit.normal);
+            currentDir = reflected;
+            currentPos = hitPoint + hit.normal * 0.1f;
+          } else {
+            break;
+          }
+        } else {
+          glm::vec3 endPoint = currentPos + currentDir * maxDistance;
+          ray.points.push_back(endPoint);
+
+          float distanceLoss = calculatePathLoss(maxDistance, source.frequency);
+          currentStrength *= distanceLoss;
+          break;
+        }
+      }
+
+      ray.strength = currentStrength;
+      ray.bounces = ray.points.size() - 1;
+
+      if (ray.points.size() > 1) {
+        signalRays.push_back(ray);
+      }
+    }
+  }
+}
+
+
+////
+//// renderer.cpp
+////
+#include "renderer.h"
+
+#include <iostream>
+#include <vector>
+
+const std::string Renderer::vertexShaderSource = R"(
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+out vec3 FragPos;
+out vec3 Normal;
+
+void main() {
+    FragPos = vec3(model * vec4(aPos, 1.0));
+    Normal = mat3(transpose(inverse(model))) * aNormal;
+    
+    gl_Position = projection * view * vec4(FragPos, 1.0);
+}
+)";
+
+const std::string Renderer::fragmentShaderSource = R"(
+#version 330 core
+out vec4 FragColor;
+
+in vec3 FragPos;
+in vec3 Normal;
+
+uniform vec3 lightPos;
+uniform vec3 lightColor;
+uniform vec3 viewPos;
+
+void main() {
+    vec3 color = vec3(0.6, 0.7, 0.8);
+    
+    float ambientStrength = 0.3;
+    vec3 ambient = ambientStrength * lightColor;
+    
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(lightPos - FragPos);
+    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 diffuse = diff * lightColor;
+    
+    float specularStrength = 0.1;
+    vec3 viewDir = normalize(viewPos - FragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+    vec3 specular = specularStrength * spec * lightColor;
+    
+    vec3 result = (ambient + diffuse + specular) * color;
+    FragColor = vec4(result, 1.0);
+}
+)";
+
+Renderer::Renderer()
+    : shaderProgram(0), VAO(0), VBO(0), EBO(0), indexCount(0) {}
+
+Renderer::~Renderer() { cleanup(); }
+
+bool Renderer::initialize(int width, int height) {
+  shaderProgram = createShaderProgram(vertexShaderSource, fragmentShaderSource);
+  if (shaderProgram == 0) {
+    std::cerr << "Failed to create shader program" << std::endl;
+    return false;
+  }
+
+  glGenVertexArrays(1, &VAO);
+  glGenBuffers(1, &VBO);
+  glGenBuffers(1, &EBO);
+
+  glEnable(GL_DEPTH_TEST);
+
+  glClearColor(0.5f, 0.7f, 1.0f, 1.0f);
+
+  return true;
+}
+
+void Renderer::render(const glm::mat4 &view, const glm::mat4 &projection,
+                      const glm::mat4 &model) {
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  if (indexCount == 0)
+    return;
+
+  glUseProgram(shaderProgram);
+
+  GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
+  GLint viewLoc = glGetUniformLocation(shaderProgram, "view");
+  GLint projLoc = glGetUniformLocation(shaderProgram, "projection");
+  GLint lightPosLoc = glGetUniformLocation(shaderProgram, "lightPos");
+  GLint lightColorLoc = glGetUniformLocation(shaderProgram, "lightColor");
+  GLint viewPosLoc = glGetUniformLocation(shaderProgram, "viewPos");
+
+  glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
+  glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
+  glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projection[0][0]);
+
+  glUniform3f(lightPosLoc, 1000.0f, 2000.0f, 1000.0f);
+  glUniform3f(lightColorLoc, 1.0f, 1.0f, 0.9f);
+
+  glm::mat4 invView = glm::inverse(view);
+  glm::vec3 cameraPos = glm::vec3(invView[3]);
+  glUniform3f(viewPosLoc, cameraPos.x, cameraPos.y, cameraPos.z);
+
+  glBindVertexArray(VAO);
+  glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexCount),
+                 GL_UNSIGNED_INT, 0);
+  glBindVertexArray(0);
+}
+
+void Renderer::setModelData(const std::vector<float> &vertices,
+                            const std::vector<unsigned int> &indices) {
+  indexCount = indices.size();
+
+  glBindVertexArray(VAO);
+
+  glBindBuffer(GL_ARRAY_BUFFER, VBO);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float),
+               vertices.data(), GL_STATIC_DRAW);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int),
+               indices.data(), GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+                        (void *)(3 * sizeof(float)));
+  glEnableVertexAttribArray(1);
+
+  glBindVertexArray(0);
+}
+
+void Renderer::cleanup() {
+  if (VAO)
+    glDeleteVertexArrays(1, &VAO);
+  if (VBO)
+    glDeleteBuffers(1, &VBO);
+  if (EBO)
+    glDeleteBuffers(1, &EBO);
+  if (shaderProgram)
+    glDeleteProgram(shaderProgram);
+}
+
+GLuint Renderer::compileShader(const std::string &source, GLenum type) {
+  GLuint shader = glCreateShader(type);
+  const char *src = source.c_str();
+  glShaderSource(shader, 1, &src, nullptr);
+  glCompileShader(shader);
+
+  GLint success;
+  glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+  if (!success) {
+    char infoLog[512];
+    glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+    std::cerr << "Shader compilation error: " << infoLog << std::endl;
+    glDeleteShader(shader);
+    return 0;
+  }
+
+  return shader;
+}
+
+GLuint Renderer::createShaderProgram(const std::string &vertexSource,
+                                     const std::string &fragmentSource) {
+  GLuint vertexShader = compileShader(vertexSource, GL_VERTEX_SHADER);
+  GLuint fragmentShader = compileShader(fragmentSource, GL_FRAGMENT_SHADER);
+
+  if (vertexShader == 0 || fragmentShader == 0) {
+    return 0;
+  }
+
+  GLuint program = glCreateProgram();
+  glAttachShader(program, vertexShader);
+  glAttachShader(program, fragmentShader);
+  glLinkProgram(program);
+
+  GLint success;
+  glGetProgramiv(program, GL_LINK_STATUS, &success);
+  if (!success) {
+    char infoLog[512];
+    glGetProgramInfoLog(program, 512, nullptr, infoLog);
+    std::cerr << "Program linking error: " << infoLog << std::endl;
+    glDeleteProgram(program);
+    program = 0;
+  }
+
+  glDeleteShader(vertexShader);
+  glDeleteShader(fragmentShader);
+
+  return program;
+}
+
+////
+//// spatial_index.cpp
+////
+#include "spatial_index.h"
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+
+SpatialIndex::SpatialIndex() {}
+SpatialIndex::~SpatialIndex() {}
+
+void SpatialIndex::build(const std::vector<Triangle> &triangles) {
+  std::cout << "Building BVH..." << std::endl;
+  m_triangles = triangles;
+
+  if (m_triangles.empty())
+    return;
+
+  m_sceneBounds = BoundingBox();
+  for (const auto &tri : m_triangles) {
+    m_sceneBounds.expand(tri.v0);
+    m_sceneBounds.expand(tri.v1);
+    m_sceneBounds.expand(tri.v2);
+  }
+
+  std::vector<unsigned int> allIndices(m_triangles.size());
+  for (size_t i = 0; i < m_triangles.size(); i++)
+    allIndices[i] = i;
+
+  m_root = buildBVH(allIndices, 0);
+  std::cout << "BVH done" << std::endl;
+}
+
+std::unique_ptr<BVHNode>
+SpatialIndex::buildBVH(std::vector<unsigned int> &indices, int depth) {
+  auto node = std::make_unique<BVHNode>();
+
+  node->bounds = BoundingBox();
+  for (unsigned int idx : indices) {
+    const Triangle &tri = m_triangles[idx];
+    node->bounds.expand(tri.v0);
+    node->bounds.expand(tri.v1);
+    node->bounds.expand(tri.v2);
+  }
+
+  if (indices.size() <= 50 || depth >= 15) {
+    node->isLeaf = true;
+    node->triangleIndices = indices;
+    return node;
+  }
+
+  glm::vec3 extent = node->bounds.max - node->bounds.min;
+  int axis = (extent.x > extent.y && extent.x > extent.z)
+                 ? 0
+                 : (extent.y > extent.z ? 1 : 2);
+
+  std::sort(indices.begin(), indices.end(),
+            [&](unsigned int a, unsigned int b) {
+              const Triangle &triA = m_triangles[a];
+              const Triangle &triB = m_triangles[b];
+              glm::vec3 centroidA = (triA.v0 + triA.v1 + triA.v2) * 0.333333f;
+              glm::vec3 centroidB = (triB.v0 + triB.v1 + triB.v2) * 0.333333f;
+              return centroidA[axis] < centroidB[axis];
+            });
+
+  size_t mid = indices.size() / 2;
+  std::vector<unsigned int> leftIndices(indices.begin(), indices.begin() + mid);
+  std::vector<unsigned int> rightIndices(indices.begin() + mid, indices.end());
+
+  if (!leftIndices.empty())
+    node->left = buildBVH(leftIndices, depth + 1);
+  if (!rightIndices.empty())
+    node->right = buildBVH(rightIndices, depth + 1);
+
+  return node;
+}
+
+RayHit SpatialIndex::intersect(const Ray &ray) const {
+  if (!m_root)
+    return RayHit();
+  return intersectBVH(m_root.get(), ray);
+}
+
+RayHit SpatialIndex::intersectBVH(const BVHNode *node, const Ray &ray) const {
+  if (!node ||
+      !node->bounds.intersect(ray.origin, ray.direction, ray.tMin, ray.tMax)) {
+    return RayHit();
+  }
+
+  if (node->isLeaf) {
+    RayHit closestHit;
+    closestHit.hit = false;
+    closestHit.distance = ray.tMax;
+
+    for (unsigned int idx : node->triangleIndices) {
+      const Triangle &tri = m_triangles[idx];
+      float t;
+      glm::vec3 hitPoint;
+
+      if (intersectTriangle(ray, tri, t, hitPoint) && t > ray.tMin &&
+          t < closestHit.distance) {
+        closestHit.hit = true;
+        closestHit.distance = t;
+        closestHit.point = hitPoint;
+        closestHit.normal = tri.normal;
+        closestHit.triangleId = tri.id;
+      }
+    }
+    return closestHit;
+  }
+
+  RayHit leftHit = intersectBVH(node->left.get(), ray);
+  RayHit rightHit = intersectBVH(node->right.get(), ray);
+
+  if (leftHit.hit && rightHit.hit) {
+    return (leftHit.distance < rightHit.distance) ? leftHit : rightHit;
+  }
+  return leftHit.hit ? leftHit : rightHit;
+}
+
+bool SpatialIndex::intersectAny(const Ray &ray) const {
+  if (!m_root)
+    return false;
+  return intersectAnyBVH(m_root.get(), ray);
+}
+
+bool SpatialIndex::intersectAnyBVH(const BVHNode *node, const Ray &ray) const {
+  if (!node ||
+      !node->bounds.intersect(ray.origin, ray.direction, ray.tMin, ray.tMax))
+    return false;
+
+  if (node->isLeaf) {
+    for (unsigned int idx : node->triangleIndices) {
+      const Triangle &tri = m_triangles[idx];
+      float t;
+      glm::vec3 hitPoint;
+      if (intersectTriangle(ray, tri, t, hitPoint) && t > ray.tMin &&
+          t < ray.tMax)
+        return true;
+    }
+    return false;
+  }
+
+  return intersectAnyBVH(node->left.get(), ray) ||
+         intersectAnyBVH(node->right.get(), ray);
+}
+
+bool SpatialIndex::intersectTriangle(const Ray &ray, const Triangle &tri,
+                                     float &t, glm::vec3 &hitPoint) const {
+  const float EPSILON = 0.0000001f;
+
+  glm::vec3 edge1 = tri.v1 - tri.v0;
+  glm::vec3 edge2 = tri.v2 - tri.v0;
+  glm::vec3 h = glm::cross(ray.direction, edge2);
+  float a = glm::dot(edge1, h);
+
+  if (a > -EPSILON && a < EPSILON)
+    return false;
+
+  float f = 1.0f / a;
+  glm::vec3 s = ray.origin - tri.v0;
+  float u = f * glm::dot(s, h);
+
+  if (u < 0.0f || u > 1.0f)
+    return false;
+
+  glm::vec3 q = glm::cross(s, edge1);
+  float v = f * glm::dot(ray.direction, q);
+
+  if (v < 0.0f || u + v > 1.0f)
+    return false;
+
+  t = f * glm::dot(edge2, q);
+
+  if (t > EPSILON) {
+    hitPoint = ray.origin + ray.direction * t;
+    return true;
+  }
+
+  return false;
+}
+
+void SpatialIndex::extractBuildings() {
+  std::cout << "Skipping building extraction (not needed for physics)"
+            << std::endl;
+}
+
+void SpatialIndex::printStats() const {
+  glm::vec3 size = m_sceneBounds.max - m_sceneBounds.min;
+  std::cout << "Spatial index: " << m_triangles.size() << " triangles, "
+            << (int)size.x << "x" << (int)size.y << "x" << (int)size.z << "m\n"
+            << std::endl;
+}
+
+bool SpatialIndex::saveBVH(const std::string &filename) const {
+  std::ofstream out(filename, std::ios::binary);
+  if (!out.is_open()) {
+    std::cerr << "Failed to open file for writing: " << filename << std::endl;
+    return false;
+  }
+
+  const char magic[4] = {'B', 'V', 'H', '1'};
+  out.write(magic, 4);
+
+  size_t triCount = m_triangles.size();
+  out.write(reinterpret_cast<const char *>(&triCount), sizeof(size_t));
+
+  for (const auto &tri : m_triangles) {
+    out.write(reinterpret_cast<const char *>(&tri.v0), sizeof(glm::vec3));
+    out.write(reinterpret_cast<const char *>(&tri.v1), sizeof(glm::vec3));
+    out.write(reinterpret_cast<const char *>(&tri.v2), sizeof(glm::vec3));
+    out.write(reinterpret_cast<const char *>(&tri.normal), sizeof(glm::vec3));
+    out.write(reinterpret_cast<const char *>(&tri.id), sizeof(unsigned int));
+  }
+
+  out.write(reinterpret_cast<const char *>(&m_sceneBounds.min),
+            sizeof(glm::vec3));
+  out.write(reinterpret_cast<const char *>(&m_sceneBounds.max),
+            sizeof(glm::vec3));
+
+  serializeBVHNode(out, m_root.get());
+
+  out.close();
+  std::cout << "BVH saved to " << filename << std::endl;
+  return true;
+}
+
+bool SpatialIndex::loadBVH(const std::string &filename) {
+  std::ifstream in(filename, std::ios::binary);
+  if (!in.is_open()) {
+    std::cerr << "BVH file not found: " << filename << std::endl;
+    return false;
+  }
+
+  char magic[4];
+  in.read(magic, 4);
+  if (magic[0] != 'B' || magic[1] != 'V' || magic[2] != 'H' ||
+      magic[3] != '1') {
+    std::cerr << "Invalid BVH file format" << std::endl;
+    return false;
+  }
+
+  size_t triCount;
+  in.read(reinterpret_cast<char *>(&triCount), sizeof(size_t));
+
+  m_triangles.clear();
+  m_triangles.reserve(triCount);
+  for (size_t i = 0; i < triCount; i++) {
+    Triangle tri;
+    in.read(reinterpret_cast<char *>(&tri.v0), sizeof(glm::vec3));
+    in.read(reinterpret_cast<char *>(&tri.v1), sizeof(glm::vec3));
+    in.read(reinterpret_cast<char *>(&tri.v2), sizeof(glm::vec3));
+    in.read(reinterpret_cast<char *>(&tri.normal), sizeof(glm::vec3));
+    in.read(reinterpret_cast<char *>(&tri.id), sizeof(unsigned int));
+    m_triangles.push_back(tri);
+  }
+
+  in.read(reinterpret_cast<char *>(&m_sceneBounds.min), sizeof(glm::vec3));
+  in.read(reinterpret_cast<char *>(&m_sceneBounds.max), sizeof(glm::vec3));
+
+  m_root = deserializeBVHNode(in);
+
+  in.close();
+  std::cout << "BVH loaded from " << filename << " (" << triCount
+            << " triangles)" << std::endl;
+  return true;
+}
+
+void SpatialIndex::serializeBVHNode(std::ofstream &out,
+                                    const BVHNode *node) const {
+  if (!node) {
+    bool isNull = true;
+    out.write(reinterpret_cast<const char *>(&isNull), sizeof(bool));
+    return;
+  }
+
+  bool isNull = false;
+  out.write(reinterpret_cast<const char *>(&isNull), sizeof(bool));
+
+  out.write(reinterpret_cast<const char *>(&node->bounds.min),
+            sizeof(glm::vec3));
+  out.write(reinterpret_cast<const char *>(&node->bounds.max),
+            sizeof(glm::vec3));
+
+  out.write(reinterpret_cast<const char *>(&node->isLeaf), sizeof(bool));
+
+  if (node->isLeaf) {
+    size_t indexCount = node->triangleIndices.size();
+    out.write(reinterpret_cast<const char *>(&indexCount), sizeof(size_t));
+    out.write(reinterpret_cast<const char *>(node->triangleIndices.data()),
+              indexCount * sizeof(unsigned int));
+  } else {
+    serializeBVHNode(out, node->left.get());
+    serializeBVHNode(out, node->right.get());
+  }
+}
+
+std::unique_ptr<BVHNode> SpatialIndex::deserializeBVHNode(std::ifstream &in) {
+  bool isNull;
+  in.read(reinterpret_cast<char *>(&isNull), sizeof(bool));
+  if (isNull) {
+    return nullptr;
+  }
+
+  auto node = std::make_unique<BVHNode>();
+
+  in.read(reinterpret_cast<char *>(&node->bounds.min), sizeof(glm::vec3));
+  in.read(reinterpret_cast<char *>(&node->bounds.max), sizeof(glm::vec3));
+
+  in.read(reinterpret_cast<char *>(&node->isLeaf), sizeof(bool));
+
+  if (node->isLeaf) {
+    size_t indexCount;
+    in.read(reinterpret_cast<char *>(&indexCount), sizeof(size_t));
+    node->triangleIndices.resize(indexCount);
+    in.read(reinterpret_cast<char *>(node->triangleIndices.data()),
+            indexCount * sizeof(unsigned int));
+  } else {
+    node->left = deserializeBVHNode(in);
+    node->right = deserializeBVHNode(in);
+  }
+
+  return node;
+}
+
+
+////
+//// ui_manager.cpp
+////
+#include "ui_manager.h"
+#include "camera.h"
+#include "node_manager.h"
+
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+
+#include <iostream>
+
+UIManager::UIManager() {}
+
+UIManager::~UIManager() {
+  if (initialized) {
+    cleanup();
+  }
+}
+
+bool UIManager::initialize(GLFWwindow *win, const char *glsl_version) {
+  window = win;
+
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO &io = ImGui::GetIO();
+  (void)io;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+  ImGui::StyleColorsDark();
+
+  ImGuiStyle &style = ImGui::GetStyle();
+  style.WindowRounding = 5.0f;
+  style.FrameRounding = 3.0f;
+  style.WindowBorderSize = 1.0f;
+  style.FrameBorderSize = 0.0f;
+  style.PopupBorderSize = 1.0f;
+
+  ImVec4 *colors = style.Colors;
+  colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.06f, 0.06f, 0.94f);
+  colors[ImGuiCol_TitleBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+  colors[ImGuiCol_TitleBgActive] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
+  colors[ImGuiCol_Button] = ImVec4(0.20f, 0.25f, 0.30f, 1.00f);
+  colors[ImGuiCol_ButtonHovered] = ImVec4(0.28f, 0.35f, 0.42f, 1.00f);
+  colors[ImGuiCol_ButtonActive] = ImVec4(0.35f, 0.45f, 0.55f, 1.00f);
+  colors[ImGuiCol_Header] = ImVec4(0.20f, 0.25f, 0.30f, 0.55f);
+  colors[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.33f, 0.40f, 0.80f);
+  colors[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.33f, 0.40f, 1.00f);
+
+  if (!ImGui_ImplGlfw_InitForOpenGL(window, true)) {
+    std::cerr << "Failed to initialize ImGui GLFW backend" << std::endl;
+    return false;
+  }
+
+  if (!ImGui_ImplOpenGL3_Init(glsl_version)) {
+    std::cerr << "Failed to initialize ImGui OpenGL3 backend" << std::endl;
+    ImGui_ImplGlfw_Shutdown();
+    return false;
+  }
+
+  initialized = true;
+  std::cout << "ImGui initialized successfully" << std::endl;
+  return true;
+}
+
+void UIManager::beginFrame() {
+  ImGui_ImplOpenGL3_NewFrame();
+  ImGui_ImplGlfw_NewFrame();
+  ImGui::NewFrame();
+}
+
+void UIManager::render(const Camera &camera, float fps, float deltaTime,
+                       NodeManager *nodeManager) {
+  if (state.showControlPanel) {
+    renderControlPanel(camera, fps, deltaTime);
+  }
+
+  if (state.showPerformanceWindow) {
+    renderPerformanceWindow(fps, deltaTime);
+  }
+
+  if (state.showNodePanel && nodeManager) {
+    renderNodePanel(nodeManager);
+  }
+
+  if (state.showAboutWindow) {
+    renderAboutWindow();
+  }
+
+  if (state.showDemoWindow) {
+    ImGui::ShowDemoWindow(&state.showDemoWindow);
+  }
+}
+
+void UIManager::endFrame() {
+  ImGui::Render();
+  ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void UIManager::cleanup() {
+  if (initialized) {
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    initialized = false;
+  }
+}
+
+bool UIManager::wantCaptureMouse() const {
+  return ImGui::GetIO().WantCaptureMouse;
+}
+
+bool UIManager::wantCaptureKeyboard() const {
+  return ImGui::GetIO().WantCaptureKeyboard;
+}
+
+void UIManager::setMouseLookMode(bool enabled) {
+  ImGuiIO &io = ImGui::GetIO();
+  if (enabled) {
+    io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+    io.WantCaptureMouse = false;
+    io.WantCaptureKeyboard = false;
+  } else {
+    io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+  }
+}
+
+void UIManager::renderControlPanel(const Camera &camera, float fps,
+                                   float deltaTime) {
+  ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(350, 400), ImGuiCond_FirstUseEver);
+
+  ImGui::Begin("Control Panel", &state.showControlPanel);
+
+  if (ImGui::CollapsingHeader("Application", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Text("RF Propagation Modelling Tool");
+    ImGui::Separator();
+
+    if (ImGui::Button("Show Demo Window")) {
+      state.showDemoWindow = !state.showDemoWindow;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("About")) {
+      state.showAboutWindow = !state.showAboutWindow;
+    }
+  }
+
+  if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+    glm::vec3 pos = camera.getPosition();
+    glm::vec3 front = camera.getFront();
+    glm::vec3 up = camera.getUp();
+
+    ImGui::Text("Position:");
+    ImGui::BulletText("X: %.2f", pos.x);
+    ImGui::BulletText("Y: %.2f", pos.y);
+    ImGui::BulletText("Z: %.2f", pos.z);
+
+    ImGui::Spacing();
+    ImGui::Text("Direction:");
+    ImGui::BulletText("X: %.2f", front.x);
+    ImGui::BulletText("Y: %.2f", front.y);
+    ImGui::BulletText("Z: %.2f", front.z);
+
+    ImGui::Spacing();
+    ImGui::Text("FOV: %.1f°", camera.getFov());
+  }
+
+  if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::TextWrapped("ESC - Exit application");
+    ImGui::TextWrapped("TAB - Toggle mouse look");
+    ImGui::TextWrapped("WASD - Move camera");
+    ImGui::TextWrapped("Q/E - Move up/down");
+    ImGui::TextWrapped("SHIFT - Speed boost");
+    ImGui::TextWrapped("Mouse - Look around");
+    ImGui::TextWrapped("Scroll - Zoom");
+  }
+
+  ImGui::End();
+}
+
+void UIManager::renderPerformanceWindow(float fps, float deltaTime) {
+  ImGui::SetNextWindowPos(ImVec2(10, 420), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(350, 150), ImGuiCond_FirstUseEver);
+
+  ImGui::Begin("Performance", &state.showPerformanceWindow);
+
+  fpsHistory[fpsHistoryIndex] = fps;
+  fpsHistoryIndex = (fpsHistoryIndex + 1) % FPS_SAMPLE_COUNT;
+
+  float avgFps = 0.0f;
+  for (int i = 0; i < FPS_SAMPLE_COUNT; i++) {
+    avgFps += fpsHistory[i];
+  }
+  avgFps /= FPS_SAMPLE_COUNT;
+
+  ImGui::Text("FPS: %.1f (avg: %.1f)", fps, avgFps);
+  ImGui::Text("Frame Time: %.3f ms", deltaTime * 1000.0f);
+
+  ImGui::Spacing();
+  ImGui::PlotLines("FPS", fpsHistory, FPS_SAMPLE_COUNT, fpsHistoryIndex, NULL,
+                   0.0f, 120.0f, ImVec2(0, 80));
+
+  ImGui::End();
+}
+
+void UIManager::renderAboutWindow() {
+  ImGui::SetNextWindowPos(ImVec2(400, 100), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_FirstUseEver);
+
+  ImGui::Begin("About", &state.showAboutWindow);
+
+  ImGui::TextWrapped("RF Propagation Modelling Tool");
+  ImGui::Separator();
+
+  ImGui::TextWrapped("Real-time 3D RF propagation simulator with interactive "
+                     "node placement and GPU-accelerated computation.");
+
+  ImGui::Spacing();
+  ImGui::Text("Version: 0.1.0 (Phase 1 - ImGui Integration)");
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Text("Technologies:");
+  ImGui::BulletText("OpenGL 3.3+");
+  ImGui::BulletText("Dear ImGui %s", IMGUI_VERSION);
+  ImGui::BulletText("GLFW");
+  ImGui::BulletText("GLEW");
+  ImGui::BulletText("GLM");
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::TextWrapped("Project: helmholtz");
+  ImGui::TextWrapped("Built for Junction25");
+
+  if (ImGui::Button("Close")) {
+    state.showAboutWindow = false;
+  }
+
+  ImGui::End();
+}
+
+void UIManager::renderNodePanel(NodeManager *nodeManager) {
+  ImGui::SetNextWindowPos(ImVec2(10, 580), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(350, 400), ImGuiCond_FirstUseEver);
+
+  ImGui::Begin("Nodes", &state.showNodePanel);
+
+  if (ImGui::CollapsingHeader("Placement", ImGuiTreeNodeFlags_DefaultOpen)) {
+    bool placementMode = nodeManager->isPlacementMode();
+    if (ImGui::Checkbox("Placement Mode", &placementMode)) {
+      nodeManager->setPlacementMode(placementMode);
+    }
+
+    if (placementMode) {
+      ImGui::TextWrapped("Click in 3D view to place node");
+
+      static int nodeTypeIndex = 0;
+      const char *nodeTypes[] = {"Transmitter", "Receiver", "Relay"};
+      if (ImGui::Combo("Type", &nodeTypeIndex, nodeTypes, 3)) {
+        nodeManager->setPlacementType(static_cast<NodeType>(nodeTypeIndex));
+      }
+    }
+  }
+
+  if (ImGui::CollapsingHeader("Node List", ImGuiTreeNodeFlags_DefaultOpen)) {
+    const auto &nodes = nodeManager->getNodes();
+
+    ImGui::Text("Total Nodes: %d", (int)nodes.size());
+    ImGui::Separator();
+
+    ImGui::BeginChild("NodeListScroll", ImVec2(0, 150), true);
+
+    for (size_t i = 0; i < nodes.size(); i++) {
+      const auto &node = nodes[i];
+
+      ImGui::PushID(node.id);
+
+      bool isSelected = node.selected;
+      if (ImGui::Selectable(node.name.c_str(), isSelected)) {
+        nodeManager->selectNode(node.id);
+      }
+
+      if (ImGui::BeginPopupContextItem()) {
+        if (ImGui::MenuItem("Delete")) {
+          nodeManager->deleteNode(node.id);
+        }
+        ImGui::EndPopup();
+      }
+
+      ImGui::PopID();
+    }
+
+    ImGui::EndChild();
+
+    if (ImGui::Button("Add Transmitter")) {
+      glm::vec3 pos(0.0f, 100.0f, 0.0f);
+      nodeManager->createNode(pos, 2.4e9f, 20.0f, NodeType::TRANSMITTER);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Delete Selected")) {
+      nodeManager->deleteSelectedNode();
+    }
+  }
+
+  RadioSource *selectedNode = nodeManager->getSelectedNode();
+  if (selectedNode &&
+      ImGui::CollapsingHeader("Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::PushItemWidth(200);
+
+    char nameBuf[128];
+    strncpy(nameBuf, selectedNode->name.c_str(), sizeof(nameBuf) - 1);
+    nameBuf[sizeof(nameBuf) - 1] = '\0';
+    if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf))) {
+      selectedNode->name = nameBuf;
+    }
+
+    int typeIndex = static_cast<int>(selectedNode->type);
+    const char *nodeTypes[] = {"Transmitter", "Receiver", "Relay"};
+    if (ImGui::Combo("Type", &typeIndex, nodeTypes, 3)) {
+      selectedNode->type = static_cast<NodeType>(typeIndex);
+    }
+
+    ImGui::DragFloat3("Position", &selectedNode->position.x, 1.0f);
+
+    float freqMHz = selectedNode->frequency / 1e6f;
+    if (ImGui::DragFloat("Frequency (MHz)", &freqMHz, 0.1f, 1.0f, 10000.0f)) {
+      selectedNode->frequency = freqMHz * 1e6f;
+      selectedNode->color =
+          RadioSource::frequencyToColor(selectedNode->frequency);
+    }
+
+    ImGui::DragFloat("Power (dBm)", &selectedNode->power, 0.1f, -100.0f,
+                     100.0f);
+    ImGui::DragFloat("Antenna Gain (dBi)", &selectedNode->antennaGain, 0.1f,
+                     -20.0f, 30.0f);
+    ImGui::DragFloat("Antenna Height (m)", &selectedNode->antennaHeight, 0.1f,
+                     0.0f, 100.0f);
+
+    ImGui::Checkbox("Active", &selectedNode->active);
+    ImGui::Checkbox("Visible", &selectedNode->visible);
+
+    ImGui::ColorEdit3("Color", &selectedNode->color.x);
+
+    ImGui::PopItemWidth();
+  }
+
+  ImGui::End();
+}
+
+
