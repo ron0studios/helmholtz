@@ -21,6 +21,8 @@ public:
 
   glm::vec3 getPosition() const { return position; }
   glm::vec3 getFront() const { return front; }
+  glm::vec3 getUp() const { return up; }
+  float getFov() const { return fov; }
 
   void setAspectRatio(float aspect) {
     aspectRatio = aspect;

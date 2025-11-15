@@ -37,12 +37,10 @@ ModelData ModelLoader::loadOBJ(const std::string &filepath) {
     iss >> prefix;
 
     if (prefix == "v") {
-
       float x, y, z;
       iss >> x >> y >> z;
       temp_vertices.push_back(glm::vec3(x, y, z));
     } else if (prefix == "vn") {
-
       float nx, ny, nz;
       iss >> nx >> ny >> nz;
       temp_normals.push_back(glm::vec3(nx, ny, nz));
@@ -92,14 +90,12 @@ ModelData ModelLoader::loadOBJ(const std::string &filepath) {
   }
 
   for (size_t i = 0; i < vertex_indices.size(); i += 3) {
-
     glm::vec3 v0 = temp_vertices[vertex_indices[i]];
     glm::vec3 v1 = temp_vertices[vertex_indices[i + 1]];
     glm::vec3 v2 = temp_vertices[vertex_indices[i + 2]];
 
     glm::vec3 normal;
     if (has_normals) {
-
       glm::vec3 n0 = (normal_indices[i] >= 0) ? temp_normals[normal_indices[i]]
                                               : glm::vec3(0, 1, 0);
       glm::vec3 n1 = (normal_indices[i + 1] >= 0)
@@ -110,7 +106,6 @@ ModelData ModelLoader::loadOBJ(const std::string &filepath) {
                          : glm::vec3(0, 1, 0);
       normal = glm::normalize(n0 + n1 + n2);
     } else {
-
       glm::vec3 edge1 = v1 - v0;
       glm::vec3 edge2 = v2 - v0;
       normal = glm::normalize(glm::cross(edge1, edge2));

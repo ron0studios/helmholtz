@@ -12,18 +12,38 @@ find_package(PkgConfig REQUIRED)
 # Try to find GLEW
 find_package(GLEW REQUIRED)
 
+# ImGui source files
+set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/external/imgui)
+set(IMGUI_SOURCES
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+
 # Add executable
 add_executable(radio_viz
     src/main.cpp
     src/renderer.cpp
     src/camera.cpp
     src/model_loader.cpp
+    src/radio_system.cpp
+    src/spatial_index.cpp
+    src/node_manager.cpp
+    src/node_renderer.cpp
+    src/ui_manager.cpp
+    ${IMGUI_SOURCES}
 )
 
 # Include directories
 target_include_directories(radio_viz PRIVATE
     include
     ${OPENGL_INCLUDE_DIRS}
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
 )
 
 # Link libraries

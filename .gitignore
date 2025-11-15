@@ -41,3 +41,6 @@
 *.dwo
 
 build/
+PLAN.md
+*.obj
+*.bvh
