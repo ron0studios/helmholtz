@@ -37,6 +37,7 @@ add_executable(radio_viz
     src/node_manager.cpp
     src/node_renderer.cpp
     src/ui_manager.cpp
+    src/propagation_renderer.cpp
     ${IMGUI_SOURCES}
 )
 

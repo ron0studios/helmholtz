@@ -21,7 +21,9 @@ public:
 
   // Render all UI windows
   void render(const Camera &camera, float fps, float deltaTime,
-              NodeManager *nodeManager = nullptr);
+              NodeManager *nodeManager = nullptr,
+              class RadioSystem *radioSystem = nullptr,
+              bool *needsToRunSimulation = nullptr);
 
   // End frame and render ImGui
   void endFrame();
@@ -45,6 +47,7 @@ public:
     bool showDemoWindow = false;
     bool showPerformanceWindow = true;
     bool showNodePanel = true;
+    bool showPropagationPanel = true;
   } state;
 
 private:
@@ -52,6 +55,8 @@ private:
   void renderAboutWindow();
   void renderPerformanceWindow(float fps, float deltaTime);
   void renderNodePanel(NodeManager *nodeManager);
+  void renderPropagationPanel(class RadioSystem *radioSystem,
+                              bool *needsToRunSimulation);
 
   bool initialized = false;
   GLFWwindow *window = nullptr;

@@ -1,6 +1,7 @@
 #include "ui_manager.h"
 #include "camera.h"
 #include "node_manager.h"
+#include "radio_system.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -69,7 +70,8 @@ void UIManager::beginFrame() {
 }
 
 void UIManager::render(const Camera &camera, float fps, float deltaTime,
-                       NodeManager *nodeManager) {
+                       NodeManager *nodeManager, RadioSystem *radioSystem,
+                       bool *needsToRunSimulation) {
   if (state.showControlPanel) {
     renderControlPanel(camera, fps, deltaTime);
   }
@@ -80,6 +82,10 @@ void UIManager::render(const Camera &camera, float fps, float deltaTime,
 
   if (state.showNodePanel && nodeManager) {
     renderNodePanel(nodeManager);
+  }
+
+  if (state.showPropagationPanel && radioSystem && needsToRunSimulation) {
+    renderPropagationPanel(radioSystem, needsToRunSimulation);
   }
 
   if (state.showAboutWindow) {
@@ -341,6 +347,68 @@ void UIManager::renderNodePanel(NodeManager *nodeManager) {
     ImGui::ColorEdit3("Color", &selectedNode->color.x);
 
     ImGui::PopItemWidth();
+  }
+
+  ImGui::End();
+}
+
+void UIManager::renderPropagationPanel(RadioSystem *radioSystem,
+                                       bool *needsToRunSimulation) {
+  ImGui::SetNextWindowPos(ImVec2(1550, 10), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(350, 300), ImGuiCond_FirstUseEver);
+
+  ImGui::Begin("Propagation Simulation", &state.showPropagationPanel);
+
+  ImGui::TextWrapped("Configure and run radio wave propagation simulation with "
+                     "reflections and diffraction.");
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  if (ImGui::CollapsingHeader("Simulation Parameters",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    int raysPerSource = radioSystem->getRaysPerSource();
+    if (ImGui::SliderInt("Rays Per Source", &raysPerSource, 16, 512)) {
+      radioSystem->setRaysPerSource(raysPerSource);
+    }
+    ImGui::TextWrapped("Number of rays emitted from each transmitter");
+
+    ImGui::Spacing();
+
+    int maxBounces = radioSystem->getMaxBounces();
+    if (ImGui::SliderInt("Max Bounces", &maxBounces, 0, 10)) {
+      radioSystem->setMaxBounces(maxBounces);
+    }
+    ImGui::TextWrapped("Maximum number of reflections per ray");
+
+    ImGui::Spacing();
+
+    bool enableDiffraction = radioSystem->getEnableDiffraction();
+    if (ImGui::Checkbox("Enable Diffraction", &enableDiffraction)) {
+      radioSystem->setEnableDiffraction(enableDiffraction);
+    }
+    ImGui::TextWrapped("Simulate wave bending around sharp edges");
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  if (ImGui::Button("Compute Propagation", ImVec2(-1, 40))) {
+    *needsToRunSimulation = true;
+  }
+
+  ImGui::Spacing();
+
+  const auto &rays = radioSystem->getSignalRays();
+  ImGui::Text("Active Rays: %d", (int)rays.size());
+
+  ImGui::Spacing();
+  ImGui::Separator();
+
+  if (ImGui::CollapsingHeader("Visualization")) {
+    ImGui::TextWrapped("Ray colors:");
+    ImGui::BulletText("Green/Red/Blue - Based on frequency");
+    ImGui::BulletText("Yellow - Diffracted rays");
   }
 
   ImGui::End();

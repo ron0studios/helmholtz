@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
+#include "diffraction_edge.h"
 
 enum class NodeType { TRANSMITTER, RECEIVER, RELAY };
 
@@ -79,7 +80,8 @@ public:
 
   void update(float deltaTime);
 
-  void computeSignalPropagation(const class SpatialIndex *spatialIndex);
+  void computeSignalPropagation(const class SpatialIndex *spatialIndex,
+                                const std::vector<DiffractionEdge> &diffractionEdges);
 
   const std::vector<RadioSource> &getSources() const { return sources; }
   std::vector<RadioSource> &getSources() { return sources; }
@@ -88,6 +90,10 @@ public:
   void setRaysPerSource(int count) { raysPerSource = count; }
   void setMaxBounces(int count) { maxBounces = count; }
   void setMaxDistance(float dist) { maxDistance = dist; }
+  void setEnableDiffraction(bool enable) { enableDiffraction = enable; }
+  bool getEnableDiffraction() const { return enableDiffraction; }
+  int getRaysPerSource() const { return raysPerSource; }
+  int getMaxBounces() const { return maxBounces; }
 
 private:
   std::vector<RadioSource> sources;
@@ -97,7 +103,16 @@ private:
   int raysPerSource;
   int maxBounces;
   float maxDistance;
+  bool enableDiffraction;
 
   float calculatePathLoss(float distance, float frequency);
   float calculateReflectionLoss(const glm::vec3 &normal);
+
+  void traceRay(const glm::vec3 &origin, const glm::vec3 &direction,
+                float strength, int bounce, const glm::vec3 &color,
+                const RadioSource &source, const class SpatialIndex *spatialIndex,
+                const std::vector<DiffractionEdge> &diffractionEdges,
+                SignalRay &currentPath);
+
+  std::vector<glm::vec3> generateFibonacciSphere(int numSamples);
 };

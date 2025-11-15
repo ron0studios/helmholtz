@@ -4,15 +4,100 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
+#include <map>
+#include <algorithm>
 
 #include "camera.h"
+#include "diffraction_edge.h"
 #include "model_loader.h"
 #include "node_manager.h"
 #include "node_renderer.h"
+#include "propagation_renderer.h"
 #include "radio_system.h"
 #include "renderer.h"
 #include "spatial_index.h"
 #include "ui_manager.h"
+
+struct Edge {
+  unsigned int v0, v1;
+
+  Edge(unsigned int a, unsigned int b) : v0(std::min(a, b)), v1(std::max(a, b)) {}
+
+  bool operator<(const Edge &other) const {
+    if (v0 != other.v0)
+      return v0 < other.v0;
+    return v1 < other.v1;
+  }
+};
+
+std::vector<DiffractionEdge> identifyDiffractionEdges(const ModelData &modelData) {
+  std::vector<DiffractionEdge> diffractionEdges;
+  std::map<Edge, std::vector<unsigned int>> edgeToTriangles;
+
+  for (size_t i = 0; i < modelData.indices.size(); i += 3) {
+    unsigned int i0 = modelData.indices[i];
+    unsigned int i1 = modelData.indices[i + 1];
+    unsigned int i2 = modelData.indices[i + 2];
+    unsigned int triId = i / 3;
+
+    edgeToTriangles[Edge(i0, i1)].push_back(triId);
+    edgeToTriangles[Edge(i1, i2)].push_back(triId);
+    edgeToTriangles[Edge(i2, i0)].push_back(triId);
+  }
+
+  const float sharpnessThreshold = std::cos(glm::radians(30.0f));
+
+  for (const auto &edgePair : edgeToTriangles) {
+    const Edge &edge = edgePair.first;
+    const std::vector<unsigned int> &triangles = edgePair.second;
+
+    if (triangles.size() == 2) {
+      unsigned int tri0 = triangles[0];
+      unsigned int tri1 = triangles[1];
+
+      unsigned int t0i0 = modelData.indices[tri0 * 3 + 0];
+      unsigned int t0i1 = modelData.indices[tri0 * 3 + 1];
+      unsigned int t0i2 = modelData.indices[tri0 * 3 + 2];
+
+      glm::vec3 t0v0(modelData.vertices[t0i0 * 6 + 0], modelData.vertices[t0i0 * 6 + 1],
+                     modelData.vertices[t0i0 * 6 + 2]);
+      glm::vec3 t0v1(modelData.vertices[t0i1 * 6 + 0], modelData.vertices[t0i1 * 6 + 1],
+                     modelData.vertices[t0i1 * 6 + 2]);
+      glm::vec3 t0v2(modelData.vertices[t0i2 * 6 + 0], modelData.vertices[t0i2 * 6 + 1],
+                     modelData.vertices[t0i2 * 6 + 2]);
+
+      glm::vec3 normal0 = glm::normalize(glm::cross(t0v1 - t0v0, t0v2 - t0v0));
+
+      unsigned int t1i0 = modelData.indices[tri1 * 3 + 0];
+      unsigned int t1i1 = modelData.indices[tri1 * 3 + 1];
+      unsigned int t1i2 = modelData.indices[tri1 * 3 + 2];
+
+      glm::vec3 t1v0(modelData.vertices[t1i0 * 6 + 0], modelData.vertices[t1i0 * 6 + 1],
+                     modelData.vertices[t1i0 * 6 + 2]);
+      glm::vec3 t1v1(modelData.vertices[t1i1 * 6 + 0], modelData.vertices[t1i1 * 6 + 1],
+                     modelData.vertices[t1i1 * 6 + 2]);
+      glm::vec3 t1v2(modelData.vertices[t1i2 * 6 + 0], modelData.vertices[t1i2 * 6 + 1],
+                     modelData.vertices[t1i2 * 6 + 2]);
+
+      glm::vec3 normal1 = glm::normalize(glm::cross(t1v1 - t1v0, t1v2 - t1v0));
+
+      float dotProduct = glm::dot(normal0, normal1);
+
+      if (dotProduct < sharpnessThreshold) {
+        DiffractionEdge difEdge;
+        difEdge.start = glm::vec3(modelData.vertices[edge.v0 * 6 + 0],
+                                  modelData.vertices[edge.v0 * 6 + 1],
+                                  modelData.vertices[edge.v0 * 6 + 2]);
+        difEdge.end = glm::vec3(modelData.vertices[edge.v1 * 6 + 0],
+                                modelData.vertices[edge.v1 * 6 + 1],
+                                modelData.vertices[edge.v1 * 6 + 2]);
+        diffractionEdges.push_back(difEdge);
+      }
+    }
+  }
+
+  return diffractionEdges;
+}
 
 Camera camera(45.0f, 1920.0f / 1080.0f, 0.1f, 10000.0f);
 float lastX = 960.0f;
@@ -30,9 +115,13 @@ struct AppState {
   UIManager *uiManager = nullptr;
   NodeManager *nodeManager = nullptr;
   SpatialIndex *spatialIndex = nullptr;
+  RadioSystem *radioSystem = nullptr;
+  PropagationRenderer *propagationRenderer = nullptr;
+  std::vector<DiffractionEdge> *diffractionEdges = nullptr;
 
   bool showPlacementPreview = false;
   glm::vec3 placementPreviewPos = glm::vec3(0.0f);
+  bool needsToRunSimulation = false;
 };
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
@@ -233,12 +322,22 @@ int main() {
 
   std::cout << "Spatial index ready!" << std::endl;
 
+  std::cout << "Identifying diffraction edges..." << std::endl;
+  std::vector<DiffractionEdge> diffractionEdges = identifyDiffractionEdges(modelData);
+  std::cout << "Found " << diffractionEdges.size() << " diffraction edges." << std::endl;
+
   RadioSystem radioSystem;
   NodeManager nodeManager(radioSystem);
 
   NodeRenderer nodeRenderer;
   if (!nodeRenderer.initialize()) {
     std::cerr << "Failed to initialize node renderer" << std::endl;
+    return -1;
+  }
+
+  PropagationRenderer propagationRenderer;
+  if (!propagationRenderer.initialize()) {
+    std::cerr << "Failed to initialize propagation renderer" << std::endl;
     return -1;
   }
 
@@ -251,6 +350,9 @@ int main() {
   appState.uiManager = &uiManager;
   appState.nodeManager = &nodeManager;
   appState.spatialIndex = &spatialIndex;
+  appState.radioSystem = &radioSystem;
+  appState.propagationRenderer = &propagationRenderer;
+  appState.diffractionEdges = &diffractionEdges;
   glfwSetWindowUserPointer(window, &appState);
 
   std::cout << "\\nStarting render loop. Press TAB to enable mouse look."
@@ -289,6 +391,14 @@ int main() {
 
     camera.processInput(window, deltaTime);
 
+    if (appState.needsToRunSimulation) {
+      std::cout << "Computing signal propagation..." << std::endl;
+      radioSystem.computeSignalPropagation(&spatialIndex, diffractionEdges);
+      propagationRenderer.updateRayBuffers(radioSystem.getSignalRays());
+      std::cout << "Propagation computed. Generated " << radioSystem.getSignalRays().size() << " rays." << std::endl;
+      appState.needsToRunSimulation = false;
+    }
+
     if (nodeManager.isPlacementMode() && !mouseEnabled &&
         !uiManager.wantCaptureMouse()) {
       double xpos, ypos;
@@ -317,6 +427,8 @@ int main() {
 
     nodeRenderer.render(radioSystem, view, projection);
 
+    propagationRenderer.render(view, projection);
+
     if (appState.showPlacementPreview) {
       glm::vec3 previewColor;
       NodeType placementType = nodeManager.getPlacementType();
@@ -336,7 +448,8 @@ int main() {
     }
 
     uiManager.beginFrame();
-    uiManager.render(camera, fps, deltaTime, &nodeManager);
+    uiManager.render(camera, fps, deltaTime, &nodeManager, &radioSystem,
+                     &appState.needsToRunSimulation);
     uiManager.endFrame();
 
     glfwSwapBuffers(window);
@@ -345,6 +458,7 @@ int main() {
 
   renderer.cleanup();
   nodeRenderer.cleanup();
+  propagationRenderer.cleanup();
   uiManager.cleanup();
   glfwTerminate();
 
