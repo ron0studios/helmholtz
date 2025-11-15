@@ -9,9 +9,10 @@
 #include <vector>
 
 FDTDSolver::FDTDSolver()
-    : gridSize(0), voxelSpacing(5.0f), texEx(0), texEy(0), texEz(0), texHx(0), texHy(0), texHz(0),
-      texEpsilon(0), texMu(0), texEmission(0), updateEProgram(0),
-      updateHProgram(0), markGeometryProgram(0), triangleSSBO(0) {}
+    : gridSize(0), voxelSpacing(5.0f), texEx(0), texEy(0), texEz(0), texHx(0),
+      texHy(0), texHz(0), texEpsilon(0), texMu(0), texEmission(0),
+      updateEProgram(0), updateHProgram(0), markGeometryProgram(0),
+      triangleSSBO(0) {}
 
 FDTDSolver::~FDTDSolver() { cleanup(); }
 
@@ -147,17 +148,18 @@ bool FDTDSolver::initialize(int size) {
 }
 
 bool FDTDSolver::reinitialize(int newGridSize) {
-  std::cout << "Reinitializing FDTD Solver from " << gridSize << " to " << newGridSize << std::endl;
-  
+  std::cout << "Reinitializing FDTD Solver from " << gridSize << " to "
+            << newGridSize << std::endl;
+
   // Clean up existing resources
   cleanup();
-  
+
   // Reset all texture/program IDs to 0
   texEx = texEy = texEz = texHx = texHy = texHz = 0;
   texEpsilon = texMu = texEmission = 0;
   updateEProgram = updateHProgram = markGeometryProgram = 0;
   triangleSSBO = 0;
-  
+
   // Initialize with new grid size
   return initialize(newGridSize);
 }
@@ -282,7 +284,8 @@ void FDTDSolver::markGeometryGPU(const glm::vec3 &gridCenter,
   std::vector<GPUTriangle> gpuTriangles;
   gpuTriangles.reserve(triangles.size());
 
-  // Only include triangles within a reasonable distance of the grid (with per-axis padding)
+  // Only include triangles within a reasonable distance of the grid (with
+  // per-axis padding)
   glm::vec3 maxDist = gridHalfSize * 1.5f; // 50% padding per axis
   glm::vec3 gridMin = gridCenter - maxDist;
   glm::vec3 gridMax = gridCenter + maxDist;

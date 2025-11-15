@@ -8,12 +8,7 @@
 class RadioSystem;
 class Camera;
 
-enum class GizmoAxis {
-  NONE = 0,
-  X = 1,
-  Y = 2,
-  Z = 3
-};
+enum class GizmoAxis { NONE = 0, X = 1, Y = 2, Z = 3 };
 
 class NodeRenderer {
 public:
@@ -26,15 +21,15 @@ public:
   void renderPlacementPreview(const glm::vec3 &position, const glm::vec3 &color,
                               const glm::mat4 &view,
                               const glm::mat4 &projection);
-  
+
   // Transform gizmo rendering
   void renderGizmo(const glm::vec3 &position, const glm::mat4 &view,
                    const glm::mat4 &projection, const Camera &camera);
-  
+
   // Gizmo interaction
   GizmoAxis pickGizmo(const glm::vec3 &rayOrigin, const glm::vec3 &rayDirection,
                       const glm::vec3 &gizmoPosition, const Camera &camera);
-  
+
   void cleanup();
 
 private:
@@ -42,7 +37,7 @@ private:
   GLuint nodeShaderProgram;
   GLuint sphereVAO, sphereVBO, sphereEBO;
   size_t sphereIndexCount;
-  
+
   // Gizmo rendering
   GLuint gizmoShaderProgram;
   GLuint gizmoVAO, gizmoVBO;
@@ -50,10 +45,12 @@ private:
 
   void createSphere(float radius, int segments);
   void createGizmo();
-  bool rayIntersectCylinder(const glm::vec3 &rayOrigin, const glm::vec3 &rayDirection,
-                           const glm::vec3 &cylinderStart, const glm::vec3 &cylinderEnd,
-                           float radius, float &t);
-  
+  bool rayIntersectCylinder(const glm::vec3 &rayOrigin,
+                            const glm::vec3 &rayDirection,
+                            const glm::vec3 &cylinderStart,
+                            const glm::vec3 &cylinderEnd, float radius,
+                            float &t);
+
   GLuint compileShader(const std::string &source, GLenum type);
   GLuint createShaderProgram(const std::string &vertexSource,
                              const std::string &fragmentSource);

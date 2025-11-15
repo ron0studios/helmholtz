@@ -73,13 +73,20 @@ void main() {
     float src = texture(emission, texCoord).r;
     Ez_new += src;
     
-    // Absorbing boundary conditions (simple damping near edges)
-    int boundary = 5;
+    // Absorbing boundary conditions (PML-like with gradual damping)
+    // Creates an absorbing layer at boundaries to prevent reflections
+    int pmlThickness = 8;
     float damping = 1.0;
-    if (pos.x < boundary || pos.x >= gridSize - boundary ||
-        pos.y < boundary || pos.y >= gridSize - boundary ||
-        pos.z < boundary || pos.z >= gridSize - boundary) {
-        damping = 0.95;
+    
+    // Calculate distance from nearest boundary
+    int distToBoundary = min(min(pos.x, gridSize - 1 - pos.x),
+                         min(min(pos.y, gridSize - 1 - pos.y),
+                             min(pos.z, gridSize - 1 - pos.z)));
+    
+    if (distToBoundary < pmlThickness) {
+        // Quadratic damping profile: stronger damping closer to boundary
+        float depth = float(pmlThickness - distToBoundary) / float(pmlThickness);
+        damping = 1.0 - 0.3 * depth * depth;
     }
     
     imageStore(Ex, pos, vec4(Ex_new * damping, 0.0, 0.0, 0.0));

@@ -65,8 +65,21 @@ void main() {
     float Hy_new = imageLoad(Hy, pos).r - dt * curlEy;
     float Hz_new = imageLoad(Hz, pos).r - dt * curlEz;
     
-    // Damping
-    float damping = 0.9999;
+    // Absorbing boundary conditions (PML-like with gradual damping)
+    // Creates an absorbing layer at boundaries to prevent reflections
+    int pmlThickness = 8;
+    float damping = 1.0;
+    
+    // Calculate distance from nearest boundary
+    int distToBoundary = min(min(pos.x, gridSize - 1 - pos.x),
+                         min(min(pos.y, gridSize - 1 - pos.y),
+                             min(pos.z, gridSize - 1 - pos.z)));
+    
+    if (distToBoundary < pmlThickness) {
+        // Quadratic damping profile: stronger damping closer to boundary
+        float depth = float(pmlThickness - distToBoundary) / float(pmlThickness);
+        damping = 1.0 - 0.3 * depth * depth;
+    }
     
     imageStore(Hx, pos, vec4(Hx_new * damping, 0.0, 0.0, 0.0));
     imageStore(Hy, pos, vec4(Hy_new * damping, 0.0, 0.0, 0.0));

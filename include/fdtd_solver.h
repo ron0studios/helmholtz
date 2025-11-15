@@ -15,7 +15,7 @@ public:
 
   bool initialize(int gridSize);
   void cleanup();
-  
+
   // Reinitialize with new grid size (cleans up old resources first)
   bool reinitialize(int newGridSize);
 
@@ -25,7 +25,8 @@ public:
   void reset();
 
   // GPU-based geometry marking (extremely fast)
-  void markGeometryGPU(const glm::vec3 &gridCenter, const glm::vec3 &gridHalfSize,
+  void markGeometryGPU(const glm::vec3 &gridCenter,
+                       const glm::vec3 &gridHalfSize,
                        const SpatialIndex &spatialIndex,
                        float groundLevel = 0.0f, float materialEpsilon = 50.0f);
 
@@ -41,7 +42,7 @@ public:
   GLuint getEmissionTexture() const { return texEmission; }
 
   int getGridSize() const { return gridSize; }
-  
+
   // Voxel spacing controls (meters per voxel)
   float getVoxelSpacing() const { return voxelSpacing; }
   void setVoxelSpacing(float spacing) { voxelSpacing = spacing; }

@@ -7,7 +7,7 @@
 
 VolumeRenderer::VolumeRenderer()
     : vao(0), vbo(0), shaderProgram(0), intensityScale(20.0f), stepCount(200),
-      showEmissionSource(true), showGeometryEdges(true) {}
+      showEmissionSource(true), showGeometryEdges(false) {}
 
 VolumeRenderer::~VolumeRenderer() { cleanup(); }
 
@@ -125,8 +125,8 @@ bool VolumeRenderer::initialize() {
 void VolumeRenderer::render(GLuint fieldTexture, GLuint epsilonTexture,
                             GLuint emissionTexture, const glm::mat4 &view,
                             const glm::mat4 &projection,
-                            const glm::vec3 &gridCenter, const glm::vec3 &gridHalfSize,
-                            int gridSize) {
+                            const glm::vec3 &gridCenter,
+                            const glm::vec3 &gridHalfSize, int gridSize) {
   glUseProgram(shaderProgram);
 
   // Set matrices
