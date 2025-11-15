@@ -1,6 +1,7 @@
 #include "ui_manager.h"
 #include "camera.h"
 #include "node_manager.h"
+#include "fdtd_solver.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -349,7 +350,7 @@ void UIManager::renderNodePanel(NodeManager *nodeManager) {
 void UIManager::renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
                                 int &simulationSpeed, float &emissionStrength,
                                 bool &continuousEmission, glm::vec3 &gridCenter,
-                                float &gridHalfSize, bool &autoCenterGrid,
+                                glm::vec3 &gridHalfSize, bool &autoCenterGrid,
                                 void *fdtdSolverPtr, void *volumeRendererPtr) {
   ImGui::SetNextWindowPos(ImVec2(370, 10), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(350, 500), ImGuiCond_FirstUseEver);
@@ -395,20 +396,61 @@ void UIManager::renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
 
   if (fdtdEnabled && ImGui::CollapsingHeader("Grid Settings",
                                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    // Cast to access solver properties
+    FDTDSolver* solver = static_cast<FDTDSolver*>(fdtdSolverPtr);
+    
     ImGui::Checkbox("Auto-Center on Transmitters", &autoCenterGrid);
 
+    ImGui::Spacing();
+    ImGui::Text("Detail Level (Voxel Spacing):");
+    if (solver) {
+      float voxelSpacing = solver->getVoxelSpacing();
+      if (ImGui::SliderFloat("##VoxelSpacing", &voxelSpacing, 1.0f, 20.0f, "%.1f meters/voxel")) {
+        solver->setVoxelSpacing(voxelSpacing);
+      }
+      ImGui::TextWrapped("Smaller values = finer detail but more memory. "
+                        "Grid size adjusts automatically (32-128 voxels).");
+    }
+    
     ImGui::Spacing();
     if (!autoCenterGrid) {
       ImGui::Text("Grid Center:");
       ImGui::DragFloat3("##GridCenter", &gridCenter.x, 1.0f, -1000.0f, 1000.0f);
 
       ImGui::Spacing();
-      ImGui::Text("Grid Size (half-width):");
-      ImGui::DragFloat("##GridHalfSize", &gridHalfSize, 5.0f, 50.0f, 1000.0f);
+      ImGui::Text("Grid Physical Extent (Half-Size):");
+      ImGui::DragFloat3("##GridHalfSize", &gridHalfSize.x, 5.0f, 50.0f, 1000.0f);
+      
+      ImGui::Spacing();
+      if (solver) {
+        int gridSize = solver->getGridSize();
+        float voxelSpacing = solver->getVoxelSpacing();
+        ImGui::Text("Current Grid: %d³ voxels (~%d MB)", gridSize, 
+                   (gridSize * gridSize * gridSize * 36) / (1024 * 1024));
+        ImGui::Text("Voxel Size: %.2f × %.2f × %.2f meters",
+                   gridHalfSize.x * 2.0f / gridSize, 
+                   gridHalfSize.y * 2.0f / gridSize,
+                   gridHalfSize.z * 2.0f / gridSize);
+        ImGui::Text("Target Spacing: %.1f meters/voxel", voxelSpacing);
+      }
+      ImGui::Spacing();
+      ImGui::TextWrapped("Tip: Adjust individual axes to create wider/taller grids. "
+                         "Total volume = (2*X) × (2*Y) × (2*Z) meters");
     } else {
       ImGui::TextDisabled("Grid Center: %.1f, %.1f, %.1f", gridCenter.x,
                           gridCenter.y, gridCenter.z);
-      ImGui::TextDisabled("Grid Half-Size: %.1f", gridHalfSize);
+      ImGui::TextDisabled("Grid Half-Size: %.1f, %.1f, %.1f", 
+                          gridHalfSize.x, gridHalfSize.y, gridHalfSize.z);
+      ImGui::Spacing();
+      if (solver) {
+        int gridSize = solver->getGridSize();
+        ImGui::TextDisabled("Grid: %d³ voxels (~%d MB)", gridSize,
+                           (gridSize * gridSize * gridSize * 36) / (1024 * 1024));
+        ImGui::TextDisabled("Voxel size: %.2f × %.2f × %.2f meters",
+                           gridHalfSize.x * 2.0f / gridSize, 
+                           gridHalfSize.y * 2.0f / gridSize,
+                           gridHalfSize.z * 2.0f / gridSize);
+      }
     }
 
     ImGui::Spacing();

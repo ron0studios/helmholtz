@@ -14,7 +14,7 @@ public:
   void render(GLuint fieldTexture, GLuint epsilonTexture,
               GLuint emissionTexture, const glm::mat4 &view,
               const glm::mat4 &projection, const glm::vec3 &gridCenter,
-              float gridHalfSize, int gridSize);
+              const glm::vec3 &gridHalfSize, int gridSize);
 
   // Visualization parameters
   void setIntensityScale(float scale) { intensityScale = scale; }

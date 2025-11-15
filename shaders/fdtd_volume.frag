@@ -10,7 +10,7 @@ uniform sampler3D epsilonTexture;    // Material properties
 uniform sampler3D emissionTexture;   // Emission sources
 
 uniform vec3 gridCenter;             // World-space grid center
-uniform float gridHalfSize;          // Half size of grid in world units
+uniform vec3 gridHalfSize;           // Half size of grid in world units (per-axis, anisotropic)
 uniform int gridSize;                // Grid resolution (e.g., 64, 128)
 uniform float intensityScale;        // Visualization intensity multiplier
 uniform int stepCount;               // Ray-marching steps
@@ -50,8 +50,8 @@ bool isEdge(vec3 texCoord) {
 }
 
 bool intersectBox(vec3 orig, vec3 dir, out float t0, out float t1) {
-    vec3 boxMin = gridCenter - vec3(gridHalfSize);
-    vec3 boxMax = gridCenter + vec3(gridHalfSize);
+    vec3 boxMin = gridCenter - gridHalfSize; // Component-wise subtract for anisotropic
+    vec3 boxMax = gridCenter + gridHalfSize; // Component-wise add for anisotropic
     
     vec3 invDir = 1.0 / dir;
     vec3 tMin = (boxMin - orig) * invDir;

@@ -26,8 +26,9 @@ public:
   // Render FDTD controls (pass app state from main.cpp)
   void renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
                        int &simulationSpeed, float &emissionStrength,
-                       bool &continuousEmission, void *fdtdSolver,
-                       void *volumeRenderer);
+                       bool &continuousEmission, glm::vec3 &gridCenter,
+                       glm::vec3 &gridHalfSize, bool &autoCenterGrid,
+                       void *fdtdSolverPtr, void *volumeRendererPtr);
 
   // End frame and render ImGui
   void endFrame();

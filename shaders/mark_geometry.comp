@@ -5,7 +5,7 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
 layout(r32f, binding = 0) uniform image3D epsilon;
 
 uniform vec3 gridCenter;
-uniform float gridHalfSize;
+uniform vec3 gridHalfSize; // Now vec3 for anisotropic sizing
 uniform int gridSize;
 uniform float materialEpsilon;
 uniform float groundLevel;
@@ -98,7 +98,7 @@ void main() {
     //          worldPos = localPos + gridCenter
     
     vec3 texCoord = (vec3(pos) + 0.5) / float(gridSize); // Cell center in [0,1]
-    vec3 localPos = (texCoord - 0.5) * 2.0 * gridHalfSize;
+    vec3 localPos = (texCoord - 0.5) * 2.0 * gridHalfSize; // Component-wise multiply for anisotropic
     vec3 cellWorld = localPos + gridCenter;
     
     float eps = 1.0; // Air by default

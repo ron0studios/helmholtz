@@ -30,6 +30,9 @@ float lastFrame = 0.0f;
 int windowWidth = 1920;
 int windowHeight = 1080;
 
+// Forward declaration for callbacks
+NodeRenderer *g_nodeRenderer = nullptr;
+
 struct AppState {
   UIManager *uiManager = nullptr;
   NodeManager *nodeManager = nullptr;
@@ -46,6 +49,12 @@ struct AppState {
   bool fdtdContinuousEmission = true;
   float fdtdEmissionPhase = 0.0f;
   bool fdtdAutoCenterGrid = true;
+  
+  // Gizmo interaction state
+  bool isDraggingGizmo = false;
+  GizmoAxis draggedAxis = GizmoAxis::NONE;
+  glm::vec3 dragStartNodePos = glm::vec3(0.0f);
+  glm::vec3 dragStartHitPoint = glm::vec3(0.0f);
 };
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
@@ -55,7 +64,84 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
   camera.setAspectRatio((float)width / (float)height);
 }
 
-void mouse_callback(GLFWwindow *window, double xpos, double ypos) {}
+void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
+  if (mouseEnabled) {
+    // Camera look mode
+    if (firstMouse) {
+      lastX = static_cast<float>(xpos);
+      lastY = static_cast<float>(ypos);
+      firstMouse = false;
+    }
+    
+    float xoffset = static_cast<float>(xpos) - lastX;
+    float yoffset = lastY - static_cast<float>(ypos);
+    lastX = static_cast<float>(xpos);
+    lastY = static_cast<float>(ypos);
+    
+    camera.processMouseMovement(xoffset, yoffset);
+  } else {
+    // Gizmo dragging mode
+    AppState *appState =
+        static_cast<AppState *>(glfwGetWindowUserPointer(window));
+    if (appState && appState->isDraggingGizmo && appState->nodeManager && g_nodeRenderer) {
+      glm::vec3 rayOrigin, rayDirection;
+      NodeManager::screenToWorldRay((int)xpos, (int)ypos, windowWidth,
+                                    windowHeight, camera, rayOrigin,
+                                    rayDirection);
+      
+      RadioSource *selectedNode = appState->nodeManager->getSelectedNode();
+      if (selectedNode) {
+        // Determine the axis direction
+        glm::vec3 axisDirection;
+        switch (appState->draggedAxis) {
+          case GizmoAxis::X:
+            axisDirection = glm::vec3(1, 0, 0);
+            break;
+          case GizmoAxis::Y:
+            axisDirection = glm::vec3(0, 1, 0);
+            break;
+          case GizmoAxis::Z:
+            axisDirection = glm::vec3(0, 0, 1);
+            break;
+          default:
+            return;
+        }
+        
+        // Create a plane perpendicular to the camera view that contains the axis
+        glm::vec3 cameraForward = camera.getFront();
+        glm::vec3 planeNormal = glm::normalize(glm::cross(axisDirection, 
+                                                glm::cross(cameraForward, axisDirection)));
+        
+        // If plane normal is too small, use a fallback plane
+        if (glm::length(planeNormal) < 0.01f) {
+          glm::vec3 fallback = glm::vec3(0, 1, 0);
+          if (std::abs(glm::dot(axisDirection, fallback)) > 0.9f) {
+            fallback = glm::vec3(1, 0, 0);
+          }
+          planeNormal = glm::normalize(glm::cross(axisDirection, fallback));
+        }
+        
+        // Intersect ray with plane through the start position
+        float denom = glm::dot(rayDirection, planeNormal);
+        if (std::abs(denom) > 0.0001f) {
+          glm::vec3 p0 = appState->dragStartNodePos;
+          float t = glm::dot(p0 - rayOrigin, planeNormal) / denom;
+          
+          if (t >= 0) {
+            glm::vec3 hitPoint = rayOrigin + rayDirection * t;
+            glm::vec3 delta = hitPoint - appState->dragStartHitPoint;
+            
+            // Project delta onto the axis
+            float movement = glm::dot(delta, axisDirection);
+            glm::vec3 newPos = appState->dragStartNodePos + axisDirection * movement;
+            
+            appState->nodeManager->moveSelectedNode(newPos);
+          }
+        }
+      }
+    }
+  }
+}
 
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
   camera.processMouseScroll(static_cast<float>(yoffset));
@@ -63,42 +149,105 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
 
 void mouse_button_callback(GLFWwindow *window, int button, int action,
                            int mods) {
-  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-    AppState *appState =
-        static_cast<AppState *>(glfwGetWindowUserPointer(window));
-    if (!appState || !appState->nodeManager || !appState->uiManager)
-      return;
+  AppState *appState =
+      static_cast<AppState *>(glfwGetWindowUserPointer(window));
+  if (!appState || !appState->nodeManager || !appState->uiManager)
+    return;
 
-    if (appState->uiManager->wantCaptureMouse())
-      return;
+  if (appState->uiManager->wantCaptureMouse())
+    return;
 
-    if (mouseEnabled)
-      return;
+  if (mouseEnabled)
+    return;
 
-    double xpos, ypos;
-    glfwGetCursorPos(window, &xpos, &ypos);
+  double xpos, ypos;
+  glfwGetCursorPos(window, &xpos, &ypos);
 
-    glm::vec3 rayOrigin, rayDirection;
-    NodeManager::screenToWorldRay((int)xpos, (int)ypos, windowWidth,
-                                  windowHeight, camera, rayOrigin,
-                                  rayDirection);
+  glm::vec3 rayOrigin, rayDirection;
+  NodeManager::screenToWorldRay((int)xpos, (int)ypos, windowWidth,
+                                windowHeight, camera, rayOrigin,
+                                rayDirection);
 
-    if (appState->nodeManager->isPlacementMode()) {
-      bool hit;
-      glm::vec3 position = appState->nodeManager->pickPosition(
-          rayOrigin, rayDirection, appState->spatialIndex, hit);
+  if (button == GLFW_MOUSE_BUTTON_LEFT) {
+    if (action == GLFW_PRESS) {
+      if (appState->nodeManager->isPlacementMode()) {
+        bool hit;
+        glm::vec3 position = appState->nodeManager->pickPosition(
+            rayOrigin, rayDirection, appState->spatialIndex, hit);
 
-      NodeType type = appState->nodeManager->getPlacementType();
-      appState->nodeManager->createNode(position, 2.4e9f, 20.0f, type);
+        NodeType type = appState->nodeManager->getPlacementType();
+        appState->nodeManager->createNode(position, 2.4e9f, 20.0f, type);
 
-      appState->showPlacementPreview = false;
-    } else {
-      int nodeId = appState->nodeManager->pickNode(rayOrigin, rayDirection);
-      if (nodeId >= 0) {
-        appState->nodeManager->selectNode(nodeId);
+        appState->showPlacementPreview = false;
       } else {
-        appState->nodeManager->deselectAll();
+        // Check if clicking on gizmo first
+        int selectedNodeId = appState->nodeManager->getSelectedNodeId();
+        if (selectedNodeId >= 0) {
+          RadioSource *selectedNode = appState->nodeManager->getSelectedNode();
+          if (selectedNode && g_nodeRenderer) {
+            GizmoAxis axis = g_nodeRenderer->pickGizmo(rayOrigin, rayDirection,
+                                                       selectedNode->position, camera);
+            if (axis != GizmoAxis::NONE) {
+              // Start gizmo drag - calculate initial hit point on plane
+              appState->isDraggingGizmo = true;
+              appState->draggedAxis = axis;
+              appState->dragStartNodePos = selectedNode->position;
+              
+              // Determine the axis direction
+              glm::vec3 axisDirection;
+              switch (axis) {
+                case GizmoAxis::X:
+                  axisDirection = glm::vec3(1, 0, 0);
+                  break;
+                case GizmoAxis::Y:
+                  axisDirection = glm::vec3(0, 1, 0);
+                  break;
+                case GizmoAxis::Z:
+                  axisDirection = glm::vec3(0, 0, 1);
+                  break;
+                default:
+                  axisDirection = glm::vec3(1, 0, 0);
+              }
+              
+              // Create initial plane perpendicular to camera that contains axis
+              glm::vec3 cameraForward = camera.getFront();
+              glm::vec3 planeNormal = glm::normalize(glm::cross(axisDirection, 
+                                                      glm::cross(cameraForward, axisDirection)));
+              
+              if (glm::length(planeNormal) < 0.01f) {
+                glm::vec3 fallback = glm::vec3(0, 1, 0);
+                if (std::abs(glm::dot(axisDirection, fallback)) > 0.9f) {
+                  fallback = glm::vec3(1, 0, 0);
+                }
+                planeNormal = glm::normalize(glm::cross(axisDirection, fallback));
+              }
+              
+              // Calculate initial hit point
+              float denom = glm::dot(rayDirection, planeNormal);
+              if (std::abs(denom) > 0.0001f) {
+                float t = glm::dot(selectedNode->position - rayOrigin, planeNormal) / denom;
+                appState->dragStartHitPoint = rayOrigin + rayDirection * t;
+              } else {
+                appState->dragStartHitPoint = selectedNode->position;
+              }
+              
+              return;
+            }
+          }
+        }
+        
+        // Otherwise, select node
+        int nodeId = appState->nodeManager->pickNode(rayOrigin, rayDirection);
+        if (nodeId >= 0) {
+          appState->nodeManager->selectNode(nodeId);
+        } else {
+          appState->nodeManager->deselectAll();
+        }
       }
+    } else if (action == GLFW_RELEASE) {
+      // Stop gizmo drag
+      appState->isDraggingGizmo = false;
+      appState->draggedAxis = GizmoAxis::NONE;
     }
   }
 }
@@ -250,6 +399,7 @@ int main() {
   NodeManager nodeManager(radioSystem);
 
   NodeRenderer nodeRenderer;
+  g_nodeRenderer = &nodeRenderer; // Set global pointer for callbacks
   if (!nodeRenderer.initialize()) {
     std::cerr << "Failed to initialize node renderer" << std::endl;
     return -1;
@@ -276,9 +426,9 @@ int main() {
 
   // FDTD grid parameters - position the grid in world space
   glm::vec3 fdtdGridCenter = glm::vec3(0.0f, 100.0f, 0.0f);
-  float fdtdGridHalfSize = 200.0f; // Grid spans 400 units in world space
+  glm::vec3 fdtdGridHalfSize = glm::vec3(200.0f, 200.0f, 200.0f); // Grid dimensions in world space
   glm::vec3 lastFdtdGridCenter = fdtdGridCenter;
-  float lastFdtdGridHalfSize = fdtdGridHalfSize;
+  glm::vec3 lastFdtdGridHalfSize = fdtdGridHalfSize;
 
   // Mark geometry using GPU (instant, no performance impact)
   std::cout << "Marking geometry in FDTD grid using GPU..." << std::endl;
@@ -346,19 +496,43 @@ int main() {
         // Center the grid on the bounding box of transmitters
         fdtdGridCenter = (minPos + maxPos) * 0.5f;
 
-        // Size the grid to encompass all transmitters with some padding
+        // Size the grid to encompass all transmitters with some padding (anisotropic)
         glm::vec3 size = maxPos - minPos;
-        float maxDim = glm::max(glm::max(size.x, size.y), size.z);
-        fdtdGridHalfSize =
-            glm::max(maxDim * 0.75f, 100.0f); // At least 100 units
+        fdtdGridHalfSize.x = glm::max(size.x * 0.75f, 100.0f);
+        fdtdGridHalfSize.y = glm::max(size.y * 0.75f, 100.0f);
+        fdtdGridHalfSize.z = glm::max(size.z * 0.75f, 100.0f);
       }
+    }
+
+    // Calculate required grid size based on voxel spacing (meters per voxel)
+    // This ensures constant resolution regardless of physical grid size
+    float voxelSpacing = fdtdSolver.getVoxelSpacing();
+    int requiredGridSizeX = static_cast<int>(std::ceil(fdtdGridHalfSize.x * 2.0f / voxelSpacing));
+    int requiredGridSizeY = static_cast<int>(std::ceil(fdtdGridHalfSize.y * 2.0f / voxelSpacing));
+    int requiredGridSizeZ = static_cast<int>(std::ceil(fdtdGridHalfSize.z * 2.0f / voxelSpacing));
+    
+    // Use the maximum dimension for a cubic grid
+    int requiredGridSize = glm::max(glm::max(requiredGridSizeX, requiredGridSizeY), requiredGridSizeZ);
+    
+    // Clamp to reasonable range (performance vs detail tradeoff)
+    requiredGridSize = glm::clamp(requiredGridSize, 32, 128);
+    
+    // Reinitialize if grid size needs to change
+    if (requiredGridSize != fdtdSolver.getGridSize()) {
+      std::cout << "Grid size changed from " << fdtdSolver.getGridSize() 
+                << " to " << requiredGridSize << " (voxel spacing: " 
+                << voxelSpacing << "m)" << std::endl;
+      fdtdSolver.reinitialize(requiredGridSize);
+      
+      // Force geometry remarking
+      lastFdtdGridCenter = fdtdGridCenter + glm::vec3(1000.0f);
     }
 
     // Re-mark geometry if grid changed (GPU, instant)
     // Use a larger threshold to avoid resetting too frequently
     if (appState.fdtdEnabled &&
         (glm::distance(fdtdGridCenter, lastFdtdGridCenter) > 20.0f ||
-         std::abs(fdtdGridHalfSize - lastFdtdGridHalfSize) > 20.0f)) {
+         glm::distance(fdtdGridHalfSize, lastFdtdGridHalfSize) > 20.0f)) {
       std::cout << "Grid moved significantly - resetting FDTD simulation..."
                 << std::endl;
       fdtdSolver.reset(); // Clear all fields when grid moves
@@ -374,27 +548,38 @@ int main() {
         // Add continuous oscillating source if enabled
         if (appState.fdtdContinuousEmission) {
           fdtdSolver.clearEmission();
-          appState.fdtdEmissionPhase += 0.1f;
-          float oscillation = std::sin(appState.fdtdEmissionPhase) *
-                              appState.fdtdEmissionStrength;
+          
+          // Speed of light in m/s
+          const float c = 3.0e8f;
+          
+          // Time step increment (arbitrary time scale for visualization)
+          const float dt = 1e-11f; // 10 picoseconds per simulation step
+          appState.fdtdEmissionPhase += 2.0f * M_PI * dt;
 
           // Place emission sources at all active transmitter node positions
           const auto &nodes = nodeManager.getNodes();
           for (const auto &node : nodes) {
             if (node.type == NodeType::TRANSMITTER && node.active) {
+              // Calculate oscillation based on actual frequency
+              // omega = 2 * pi * f
+              float angularFreq = 2.0f * M_PI * node.frequency;
+              float oscillation = std::sin(angularFreq * appState.fdtdEmissionPhase / (2.0f * M_PI)) *
+                                  appState.fdtdEmissionStrength;
+              
               // Convert world position to grid coordinates
               glm::vec3 localPos = node.position - fdtdGridCenter;
               glm::vec3 gridPos = (localPos / fdtdGridHalfSize) * 0.5f + 0.5f;
 
-              // Convert to integer grid indices
-              int sx = static_cast<int>(gridPos.x * FDTD_GRID_SIZE);
-              int sy = static_cast<int>(gridPos.y * FDTD_GRID_SIZE);
-              int sz = static_cast<int>(gridPos.z * FDTD_GRID_SIZE);
+              // Convert to integer grid indices (use dynamic grid size)
+              int currentGridSize = fdtdSolver.getGridSize();
+              int sx = static_cast<int>(gridPos.x * currentGridSize);
+              int sy = static_cast<int>(gridPos.y * currentGridSize);
+              int sz = static_cast<int>(gridPos.z * currentGridSize);
 
               // Clamp to grid bounds
-              sx = glm::clamp(sx, 0, FDTD_GRID_SIZE - 1);
-              sy = glm::clamp(sy, 0, FDTD_GRID_SIZE - 1);
-              sz = glm::clamp(sz, 0, FDTD_GRID_SIZE - 1);
+              sx = glm::clamp(sx, 0, currentGridSize - 1);
+              sy = glm::clamp(sy, 0, currentGridSize - 1);
+              sz = glm::clamp(sz, 0, currentGridSize - 1);
 
               fdtdSolver.addEmissionSource(sx, sy, sz, oscillation);
             }
@@ -430,7 +615,16 @@ int main() {
 
     renderer.render(view, projection, model);
 
-    nodeRenderer.render(radioSystem, view, projection);
+    int selectedNodeId = nodeManager.getSelectedNodeId();
+    nodeRenderer.render(radioSystem, view, projection, selectedNodeId);
+    
+    // Render gizmo for selected node
+    if (selectedNodeId >= 0) {
+      RadioSource *selectedNode = nodeManager.getSelectedNode();
+      if (selectedNode) {
+        nodeRenderer.renderGizmo(selectedNode->position, view, projection, camera);
+      }
+    }
 
     // Render FDTD volume if enabled
     if (appState.fdtdEnabled) {
@@ -442,7 +636,7 @@ int main() {
       volumeRenderer.render(fdtdSolver.getEzTexture(),
                             fdtdSolver.getEpsilonTexture(),
                             fdtdSolver.getEmissionTexture(), view, projection,
-                            fdtdGridCenter, fdtdGridHalfSize, FDTD_GRID_SIZE);
+                            fdtdGridCenter, fdtdGridHalfSize, fdtdSolver.getGridSize());
 
       glDepthMask(GL_TRUE);
       glDisable(GL_BLEND);

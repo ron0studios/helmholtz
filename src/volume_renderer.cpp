@@ -125,7 +125,7 @@ bool VolumeRenderer::initialize() {
 void VolumeRenderer::render(GLuint fieldTexture, GLuint epsilonTexture,
                             GLuint emissionTexture, const glm::mat4 &view,
                             const glm::mat4 &projection,
-                            const glm::vec3 &gridCenter, float gridHalfSize,
+                            const glm::vec3 &gridCenter, const glm::vec3 &gridHalfSize,
                             int gridSize) {
   glUseProgram(shaderProgram);
 
@@ -141,8 +141,8 @@ void VolumeRenderer::render(GLuint fieldTexture, GLuint epsilonTexture,
   // Set grid parameters
   glUniform3f(glGetUniformLocation(shaderProgram, "gridCenter"), gridCenter.x,
               gridCenter.y, gridCenter.z);
-  glUniform1f(glGetUniformLocation(shaderProgram, "gridHalfSize"),
-              gridHalfSize);
+  glUniform3f(glGetUniformLocation(shaderProgram, "gridHalfSize"),
+              gridHalfSize.x, gridHalfSize.y, gridHalfSize.z);
   glUniform1i(glGetUniformLocation(shaderProgram, "gridSize"), gridSize);
 
   // Set visualization parameters

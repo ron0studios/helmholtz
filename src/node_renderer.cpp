@@ -1,5 +1,6 @@
 #include "node_renderer.h"
 #include "radio_system.h"
+#include "camera.h"
 #include <GLFW/glfw3.h>
 #include <cmath>
 #include <iostream>
@@ -62,7 +63,7 @@ void main() {
 
 NodeRenderer::NodeRenderer()
     : nodeShaderProgram(0), sphereVAO(0), sphereVBO(0), sphereEBO(0),
-      sphereIndexCount(0) {}
+      sphereIndexCount(0), gizmoShaderProgram(0), gizmoVAO(0), gizmoVBO(0) {}
 
 NodeRenderer::~NodeRenderer() { cleanup(); }
 
@@ -73,7 +74,14 @@ bool NodeRenderer::initialize() {
     return false;
   }
 
+  gizmoShaderProgram = createShaderProgram(gizmoVertexShader, gizmoFragmentShader);
+  if (gizmoShaderProgram == 0) {
+    std::cerr << "Failed to create gizmo shader program" << std::endl;
+    return false;
+  }
+
   createSphere(8.0f, 16);
+  createGizmo();
 
   std::cout << "NodeRenderer initialized" << std::endl;
   return true;
@@ -149,7 +157,7 @@ void NodeRenderer::createSphere(float radius, int segments) {
 }
 
 void NodeRenderer::render(const RadioSystem &radioSystem, const glm::mat4 &view,
-                          const glm::mat4 &projection) {
+                          const glm::mat4 &projection, int selectedNodeId) {
   glUseProgram(nodeShaderProgram);
 
   GLint projLoc = glGetUniformLocation(nodeShaderProgram, "projection");
@@ -171,7 +179,8 @@ void NodeRenderer::render(const RadioSystem &radioSystem, const glm::mat4 &view,
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, node.position);
 
-    float scale = node.selected ? 1.2f : 1.0f;
+    bool isSelected = (node.id == selectedNodeId);
+    float scale = isSelected ? 1.2f : 1.0f;
     model = glm::scale(model, glm::vec3(scale));
 
     GLint modelLoc = glGetUniformLocation(nodeShaderProgram, "model");
@@ -180,7 +189,7 @@ void NodeRenderer::render(const RadioSystem &radioSystem, const glm::mat4 &view,
 
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
     glUniform3fv(colorLoc, 1, &node.color[0]);
-    glUniform1i(selectedLoc, node.selected ? 1 : 0);
+    glUniform1i(selectedLoc, isSelected ? 1 : 0);
 
     glBindVertexArray(sphereVAO);
     glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
@@ -251,6 +260,18 @@ void NodeRenderer::cleanup() {
     glDeleteProgram(nodeShaderProgram);
     nodeShaderProgram = 0;
   }
+  if (gizmoVAO != 0) {
+    glDeleteVertexArrays(1, &gizmoVAO);
+    gizmoVAO = 0;
+  }
+  if (gizmoVBO != 0) {
+    glDeleteBuffers(1, &gizmoVBO);
+    gizmoVBO = 0;
+  }
+  if (gizmoShaderProgram != 0) {
+    glDeleteProgram(gizmoShaderProgram);
+    gizmoShaderProgram = 0;
+  }
 }
 
 GLuint NodeRenderer::compileShader(const std::string &source, GLenum type) {
@@ -304,4 +325,182 @@ GLuint NodeRenderer::createShaderProgram(const std::string &vertexSource,
   glDeleteShader(fragmentShader);
 
   return program;
+}
+
+// Gizmo shaders
+const std::string NodeRenderer::gizmoVertexShader = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+
+uniform mat4 view;
+uniform mat4 projection;
+uniform vec3 gizmoPosition;
+
+out vec3 FragPos;
+
+void main() {
+    vec3 worldPos = aPos + gizmoPosition;
+    FragPos = worldPos;
+    gl_Position = projection * view * vec4(worldPos, 1.0);
+}
+)";
+
+const std::string NodeRenderer::gizmoFragmentShader = R"(
+#version 330 core
+out vec4 FragColor;
+
+in vec3 FragPos;
+uniform vec3 axisColor;
+
+void main() {
+    FragColor = vec4(axisColor, 1.0);
+}
+)";
+
+void NodeRenderer::createGizmo() {
+  // Create axis arrows as simple lines
+  float arrowLength = 50.0f;
+  
+  std::vector<float> vertices;
+  
+  // X axis (red) - horizontal
+  vertices.insert(vertices.end(), {0.0f, 0.0f, 0.0f});
+  vertices.insert(vertices.end(), {arrowLength, 0.0f, 0.0f});
+  
+  // Y axis (green) - vertical
+  vertices.insert(vertices.end(), {0.0f, 0.0f, 0.0f});
+  vertices.insert(vertices.end(), {0.0f, arrowLength, 0.0f});
+  
+  // Z axis (blue) - depth
+  vertices.insert(vertices.end(), {0.0f, 0.0f, 0.0f});
+  vertices.insert(vertices.end(), {0.0f, 0.0f, arrowLength});
+  
+  glGenVertexArrays(1, &gizmoVAO);
+  glGenBuffers(1, &gizmoVBO);
+  
+  glBindVertexArray(gizmoVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, gizmoVBO);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float),
+               vertices.data(), GL_STATIC_DRAW);
+  
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+  glEnableVertexAttribArray(0);
+  
+  glBindVertexArray(0);
+}
+
+void NodeRenderer::renderGizmo(const glm::vec3 &position, const glm::mat4 &view,
+                                const glm::mat4 &projection, const Camera &camera) {
+  if (gizmoShaderProgram == 0 || gizmoVAO == 0) return;
+  
+  glUseProgram(gizmoShaderProgram);
+  
+  glUniformMatrix4fv(glGetUniformLocation(gizmoShaderProgram, "view"),
+                     1, GL_FALSE, &view[0][0]);
+  glUniformMatrix4fv(glGetUniformLocation(gizmoShaderProgram, "projection"),
+                     1, GL_FALSE, &projection[0][0]);
+  glUniform3fv(glGetUniformLocation(gizmoShaderProgram, "gizmoPosition"),
+               1, &position[0]);
+  
+  glBindVertexArray(gizmoVAO);
+  glLineWidth(4.0f);
+  
+  // Draw X axis (red)
+  glUniform3f(glGetUniformLocation(gizmoShaderProgram, "axisColor"), 1.0f, 0.0f, 0.0f);
+  glDrawArrays(GL_LINES, 0, 2);
+  
+  // Draw Y axis (green)
+  glUniform3f(glGetUniformLocation(gizmoShaderProgram, "axisColor"), 0.0f, 1.0f, 0.0f);
+  glDrawArrays(GL_LINES, 2, 2);
+  
+  // Draw Z axis (blue)
+  glUniform3f(glGetUniformLocation(gizmoShaderProgram, "axisColor"), 0.0f, 0.0f, 1.0f);
+  glDrawArrays(GL_LINES, 4, 2);
+  
+  glLineWidth(1.0f);
+  glBindVertexArray(0);
+}
+
+bool NodeRenderer::rayIntersectCylinder(const glm::vec3 &rayOrigin,
+                                       const glm::vec3 &rayDirection,
+                                       const glm::vec3 &cylinderStart,
+                                       const glm::vec3 &cylinderEnd,
+                                       float radius, float &t) {
+  // Simplified: treat as line segment with radius
+  glm::vec3 d = cylinderEnd - cylinderStart;
+  glm::vec3 m = rayOrigin - cylinderStart;
+  glm::vec3 n = rayDirection;
+  
+  float md = glm::dot(m, d);
+  float nd = glm::dot(n, d);
+  float dd = glm::dot(d, d);
+  
+  // Check if ray intersects infinite cylinder
+  float a = dd - nd * nd;
+  float k = glm::dot(m, m) - radius * radius;
+  float c = dd * k - md * md;
+  
+  if (std::abs(a) < 0.001f) return false;
+  
+  float b = dd * glm::dot(m, n) - nd * md;
+  float discr = b * b - a * c;
+  
+  if (discr < 0.0f) return false;
+  
+  t = (-b - std::sqrt(discr)) / a;
+  if (t < 0.0f) t = (-b + std::sqrt(discr)) / a;
+  if (t < 0.0f) return false;
+  
+  // Check if hit point is within cylinder bounds
+  float hitParam = (md + t * nd) / dd;
+  if (hitParam < 0.0f || hitParam > 1.0f) return false;
+  
+  return true;
+}
+
+GizmoAxis NodeRenderer::pickGizmo(const glm::vec3 &rayOrigin,
+                                  const glm::vec3 &rayDirection,
+                                  const glm::vec3 &gizmoPosition,
+                                  const Camera &camera) {
+  float arrowLength = 50.0f;
+  float pickRadius = 5.0f; // Tolerance for picking
+  float closestT = FLT_MAX;
+  GizmoAxis closestAxis = GizmoAxis::NONE;
+  
+  float t;
+  
+  // Check X axis
+  if (rayIntersectCylinder(rayOrigin, rayDirection,
+                          gizmoPosition,
+                          gizmoPosition + glm::vec3(arrowLength, 0, 0),
+                          pickRadius, t)) {
+    if (t < closestT) {
+      closestT = t;
+      closestAxis = GizmoAxis::X;
+    }
+  }
+  
+  // Check Y axis
+  if (rayIntersectCylinder(rayOrigin, rayDirection,
+                          gizmoPosition,
+                          gizmoPosition + glm::vec3(0, arrowLength, 0),
+                          pickRadius, t)) {
+    if (t < closestT) {
+      closestT = t;
+      closestAxis = GizmoAxis::Y;
+    }
+  }
+  
+  // Check Z axis
+  if (rayIntersectCylinder(rayOrigin, rayDirection,
+                          gizmoPosition,
+                          gizmoPosition + glm::vec3(0, 0, arrowLength),
+                          pickRadius, t)) {
+    if (t < closestT) {
+      closestT = t;
+      closestAxis = GizmoAxis::Z;
+    }
+  }
+  
+  return closestAxis;
 }
