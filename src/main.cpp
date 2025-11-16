@@ -179,7 +179,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action,
             rayOrigin, rayDirection, appState->spatialIndex, hit);
 
         NodeType type = appState->nodeManager->getPlacementType();
-        appState->nodeManager->createNode(position, 2.4e9f, 20.0f, type);
+        appState->nodeManager->createNode(position, 2.4e9f, type);
 
         appState->showPlacementPreview = false;
       } else {
@@ -411,9 +411,9 @@ int main() {
     return -1;
   }
 
-  nodeManager.createNode(glm::vec3(100.0f, 150.0f, 100.0f), 2.4e9f, 20.0f,
+  nodeManager.createNode(glm::vec3(100.0f, 150.0f, 100.0f), 2.4e9f,
                          NodeType::TRANSMITTER);
-  nodeManager.createNode(glm::vec3(-100.0f, 120.0f, -100.0f), 2.4e9f, 20.0f,
+  nodeManager.createNode(glm::vec3(-100.0f, 120.0f, -100.0f), 2.4e9f,
                          NodeType::RECEIVER);
 
   // Initialize FDTD system

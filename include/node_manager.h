@@ -15,7 +15,7 @@ public:
 
   // Node creation and deletion
   int createNode(const glm::vec3 &position, float frequency = 2.4e9f,
-                 float power = 20.0f, NodeType type = NodeType::TRANSMITTER);
+                 NodeType type = NodeType::TRANSMITTER);
   void deleteNode(int id);
   void deleteSelectedNode();
 

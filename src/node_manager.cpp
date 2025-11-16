@@ -11,8 +11,8 @@ NodeManager::NodeManager(RadioSystem &rs)
 NodeManager::~NodeManager() {}
 
 int NodeManager::createNode(const glm::vec3 &position, float frequency,
-                            float power, NodeType type) {
-  int id = radioSystem.addSource(position, frequency, power, type);
+                            NodeType type) {
+  int id = radioSystem.addSource(position, frequency, type);
   return id;
 }
 

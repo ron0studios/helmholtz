@@ -27,6 +27,12 @@ public:
   bool getShowEmissionSource() const { return showEmissionSource; }
   bool getShowGeometryEdges() const { return showGeometryEdges; }
 
+  // Gradient color controls
+  void setGradientColorLow(const glm::vec3 &color) { gradientColorLow = color; }
+  void setGradientColorHigh(const glm::vec3 &color) { gradientColorHigh = color; }
+  glm::vec3 getGradientColorLow() const { return gradientColorLow; }
+  glm::vec3 getGradientColorHigh() const { return gradientColorHigh; }
+
 private:
   GLuint vao, vbo;
   GLuint shaderProgram;
@@ -36,6 +42,10 @@ private:
   int stepCount;
   bool showEmissionSource;
   bool showGeometryEdges;
+
+  // Gradient colors for waveform visualization
+  glm::vec3 gradientColorLow;  // Color for low intensity
+  glm::vec3 gradientColorHigh; // Color for high intensity
 
   GLuint compileShader(const char *source, GLenum type);
   GLuint createShaderProgram(const char *vertexPath, const char *fragmentPath);

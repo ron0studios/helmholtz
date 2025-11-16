@@ -10,9 +10,9 @@ RadioSystem::RadioSystem()
 RadioSystem::~RadioSystem() {}
 
 int RadioSystem::addSource(const glm::vec3 &position, float frequency,
-                           float power, NodeType type) {
+                           NodeType type) {
   int id = nextNodeId++;
-  sources.emplace_back(id, position, frequency, power, type);
+  sources.emplace_back(id, position, frequency, type);
   return id;
 }
 

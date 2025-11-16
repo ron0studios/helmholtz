@@ -295,7 +295,7 @@ void UIManager::renderNodePanel(NodeManager *nodeManager) {
 
     if (ImGui::Button("Add Transmitter")) {
       glm::vec3 pos(0.0f, 100.0f, 0.0f);
-      nodeManager->createNode(pos, 2.4e9f, 20.0f, NodeType::TRANSMITTER);
+      nodeManager->createNode(pos, 2.4e9f, NodeType::TRANSMITTER);
     }
     ImGui::SameLine();
     if (ImGui::Button("Delete Selected")) {
@@ -329,13 +329,6 @@ void UIManager::renderNodePanel(NodeManager *nodeManager) {
       selectedNode->color =
           RadioSource::frequencyToColor(selectedNode->frequency);
     }
-
-    ImGui::DragFloat("Power (dBm)", &selectedNode->power, 0.1f, -100.0f,
-                     100.0f);
-    ImGui::DragFloat("Antenna Gain (dBi)", &selectedNode->antennaGain, 0.1f,
-                     -20.0f, 30.0f);
-    ImGui::DragFloat("Antenna Height (m)", &selectedNode->antennaHeight, 0.1f,
-                     0.0f, 100.0f);
 
     ImGui::Checkbox("Active", &selectedNode->active);
     ImGui::Checkbox("Visible", &selectedNode->visible);
@@ -461,9 +454,27 @@ void UIManager::renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
       VolumeRenderer *volRenderer =
           static_cast<VolumeRenderer *>(volumeRendererPtr);
 
-      ImGui::TextWrapped("Red/Blue: Wave field intensity");
-      ImGui::TextWrapped("Yellow: Emission source");
-      ImGui::TextWrapped("Green: Geometry edges (debug)");
+      ImGui::TextWrapped("Wave field intensity visualization with customizable colors");
+
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::Text("Waveform Gradient Colors:");
+
+      // Color pickers for gradient
+      glm::vec3 colorLow = volRenderer->getGradientColorLow();
+      if (ImGui::ColorEdit3("Low Intensity", &colorLow.x)) {
+        volRenderer->setGradientColorLow(colorLow);
+      }
+
+      glm::vec3 colorHigh = volRenderer->getGradientColorHigh();
+      if (ImGui::ColorEdit3("High Intensity", &colorHigh.x)) {
+        volRenderer->setGradientColorHigh(colorHigh);
+      }
+
+      if (ImGui::Button("Reset to Default Colors")) {
+        volRenderer->setGradientColorLow(glm::vec3(0.0f, 0.0f, 0.5f));  // Dark blue
+        volRenderer->setGradientColorHigh(glm::vec3(1.0f, 0.0f, 0.0f)); // Red
+      }
 
       ImGui::Spacing();
       ImGui::Separator();
@@ -478,6 +489,10 @@ void UIManager::renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
       if (ImGui::Checkbox("Show Emission Sources", &showEmission)) {
         volRenderer->setShowEmissionSource(showEmission);
       }
+
+      ImGui::Spacing();
+      ImGui::TextWrapped("Yellow markers: Emission sources");
+      ImGui::TextWrapped("Green outlines: Geometry edges (debug)");
 
       ImGui::Spacing();
       ImGui::TextWrapped(
