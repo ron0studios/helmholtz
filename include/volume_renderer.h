@@ -29,7 +29,9 @@ public:
 
   // Gradient color controls
   void setGradientColorLow(const glm::vec3 &color) { gradientColorLow = color; }
-  void setGradientColorHigh(const glm::vec3 &color) { gradientColorHigh = color; }
+  void setGradientColorHigh(const glm::vec3 &color) {
+    gradientColorHigh = color;
+  }
   glm::vec3 getGradientColorLow() const { return gradientColorLow; }
   glm::vec3 getGradientColorHigh() const { return gradientColorHigh; }
 

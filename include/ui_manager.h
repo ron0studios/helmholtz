@@ -44,10 +44,10 @@ public:
 
   // Set whether mouse look mode is active (disables ImGui input capture)
   void setMouseLookMode(bool enabled);
-  
+
   // Set scene data reference for save/load
-  void setSceneDataPointers(void* sceneDataPtr);
-  
+  void setSceneDataPointers(void *sceneDataPtr);
+
   // Check if scene was just loaded
   bool wasSceneLoaded() const { return sceneJustLoaded; }
   void clearSceneLoadedFlag() { sceneJustLoaded = false; }
@@ -75,9 +75,9 @@ private:
 
   bool initialized = false;
   GLFWwindow *window = nullptr;
-  
+
   // Scene data for save/load
-  void* sceneDataPtr = nullptr;
+  void *sceneDataPtr = nullptr;
   bool sceneJustLoaded = false;
 
   // Performance tracking

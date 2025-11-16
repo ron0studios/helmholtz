@@ -2,8 +2,8 @@
 #include "camera.h"
 #include "fdtd_solver.h"
 #include "node_manager.h"
-#include "volume_renderer.h"
 #include "scene_serializer.h"
+#include "volume_renderer.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -71,7 +71,7 @@ void UIManager::beginFrame() {
   ImGui::NewFrame();
 }
 
-void UIManager::setSceneDataPointers(void* sceneData) {
+void UIManager::setSceneDataPointers(void *sceneData) {
   sceneDataPtr = sceneData;
 }
 
@@ -188,7 +188,8 @@ void UIManager::renderAboutWindow() {
   ImGui::End();
 }
 
-void UIManager::renderNodePanel(NodeManager *nodeManager, const Camera &camera) {
+void UIManager::renderNodePanel(NodeManager *nodeManager,
+                                const Camera &camera) {
   ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(350, 600), ImGuiCond_FirstUseEver);
 
@@ -307,61 +308,64 @@ void UIManager::renderNodePanel(NodeManager *nodeManager, const Camera &camera) 
 
     ImGui::PopItemWidth();
   }
-  
+
   // Scene Save/Load section
   ImGui::Spacing();
   ImGui::Separator();
   ImGui::Spacing();
-  
+
   if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
     static char saveFilePath[256] = "scene.hscene";
     static char loadFilePath[256] = "scene.hscene";
-    
+
     ImGui::Text("Save Scene");
     ImGui::InputText("##SavePath", saveFilePath, sizeof(saveFilePath));
     ImGui::SameLine();
     if (ImGui::Button("Save")) {
       if (sceneDataPtr) {
-        SceneData* sceneData = static_cast<SceneData*>(sceneDataPtr);
+        SceneData *sceneData = static_cast<SceneData *>(sceneDataPtr);
         if (SceneSerializer::saveScene(saveFilePath, nodeManager, *sceneData)) {
           ImGui::OpenPopup("SaveSuccess");
         }
       }
     }
-    
+
     ImGui::Spacing();
     ImGui::Text("Load Scene");
     ImGui::InputText("##LoadPath", loadFilePath, sizeof(loadFilePath));
     ImGui::SameLine();
     if (ImGui::Button("Load")) {
       if (sceneDataPtr) {
-        SceneData* sceneData = static_cast<SceneData*>(sceneDataPtr);
+        SceneData *sceneData = static_cast<SceneData *>(sceneDataPtr);
         if (SceneSerializer::loadScene(loadFilePath, nodeManager, *sceneData)) {
           sceneJustLoaded = true;
           ImGui::OpenPopup("LoadSuccess");
         }
       }
     }
-    
+
     // Success popups
-    if (ImGui::BeginPopupModal("SaveSuccess", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal("SaveSuccess", NULL,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
       ImGui::Text("Scene saved successfully!");
       if (ImGui::Button("OK", ImVec2(120, 0))) {
         ImGui::CloseCurrentPopup();
       }
       ImGui::EndPopup();
     }
-    
-    if (ImGui::BeginPopupModal("LoadSuccess", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+
+    if (ImGui::BeginPopupModal("LoadSuccess", NULL,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
       ImGui::Text("Scene loaded successfully!");
       if (ImGui::Button("OK", ImVec2(120, 0))) {
         ImGui::CloseCurrentPopup();
       }
       ImGui::EndPopup();
     }
-    
+
     ImGui::Spacing();
-    ImGui::TextWrapped("Scenes include: nodes, FDTD settings, camera position, and visualization settings.");
+    ImGui::TextWrapped("Scenes include: nodes, FDTD settings, camera position, "
+                       "and visualization settings.");
   }
 
   ImGui::End();
@@ -480,7 +484,8 @@ void UIManager::renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
       VolumeRenderer *volRenderer =
           static_cast<VolumeRenderer *>(volumeRendererPtr);
 
-      ImGui::TextWrapped("Wave field intensity visualization with customizable colors");
+      ImGui::TextWrapped(
+          "Wave field intensity visualization with customizable colors");
 
       ImGui::Spacing();
       ImGui::Separator();
@@ -498,7 +503,8 @@ void UIManager::renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
       }
 
       if (ImGui::Button("Reset to Default Colors")) {
-        volRenderer->setGradientColorLow(glm::vec3(0.0f, 0.0f, 0.5f));  // Dark blue
+        volRenderer->setGradientColorLow(
+            glm::vec3(0.0f, 0.0f, 0.5f)); // Dark blue
         volRenderer->setGradientColorHigh(glm::vec3(1.0f, 0.0f, 0.0f)); // Red
       }
 

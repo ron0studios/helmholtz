@@ -9,10 +9,10 @@
 #include <vector>
 
 FDTDSolver::FDTDSolver()
-    : gridSize(0), voxelSpacing(5.0f), conductivity(0.0001f), texEx(0), texEy(0), texEz(0), texHx(0),
-      texHy(0), texHz(0), texEpsilon(0), texMu(0), texEmission(0),
-      updateEProgram(0), updateHProgram(0), markGeometryProgram(0),
-      triangleSSBO(0) {}
+    : gridSize(0), voxelSpacing(5.0f), conductivity(0.0001f), texEx(0),
+      texEy(0), texEz(0), texHx(0), texHy(0), texHz(0), texEpsilon(0), texMu(0),
+      texEmission(0), updateEProgram(0), updateHProgram(0),
+      markGeometryProgram(0), triangleSSBO(0) {}
 
 FDTDSolver::~FDTDSolver() { cleanup(); }
 

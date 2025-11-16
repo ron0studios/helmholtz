@@ -14,10 +14,11 @@
 #include "node_renderer.h"
 #include "radio_system.h"
 #include "renderer.h"
+#include "scene_serializer.h"
 #include "spatial_index.h"
 #include "ui_manager.h"
 #include "volume_renderer.h"
-#include "scene_serializer.h"
+
 
 Camera camera(45.0f, 1920.0f / 1080.0f, 0.1f, 10000.0f);
 float lastX = 960.0f;
@@ -455,7 +456,7 @@ int main() {
   sceneData.gradientColorHigh = volumeRenderer.getGradientColorHigh();
   sceneData.showEmissionSource = volumeRenderer.getShowEmissionSource();
   sceneData.showGeometryEdges = volumeRenderer.getShowGeometryEdges();
-  
+
   // Pass scene data pointer to UI manager
   uiManager.setSceneDataPointers(&sceneData);
 
@@ -705,7 +706,7 @@ int main() {
         appState.fdtdEmissionStrength, appState.fdtdContinuousEmission,
         fdtdGridCenter, fdtdGridHalfSize, appState.fdtdAutoCenterGrid,
         &fdtdSolver, &volumeRenderer);
-    
+
     // Apply loaded scene data if a scene was just loaded
     if (uiManager.wasSceneLoaded()) {
       camera.setPosition(sceneData.cameraPosition);
@@ -720,7 +721,7 @@ int main() {
       volumeRenderer.setShowGeometryEdges(sceneData.showGeometryEdges);
       uiManager.clearSceneLoadedFlag();
     }
-    
+
     uiManager.endFrame();
 
     glfwSwapBuffers(window);

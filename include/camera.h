@@ -25,10 +25,19 @@ public:
   float getFov() const { return fov; }
   float getYaw() const { return yaw; }
   float getPitch() const { return pitch; }
-  
-  void setPosition(const glm::vec3& pos) { position = pos; updateCameraVectors(); }
-  void setYaw(float y) { yaw = y; updateCameraVectors(); }
-  void setPitch(float p) { pitch = p; updateCameraVectors(); }
+
+  void setPosition(const glm::vec3 &pos) {
+    position = pos;
+    updateCameraVectors();
+  }
+  void setYaw(float y) {
+    yaw = y;
+    updateCameraVectors();
+  }
+  void setPitch(float p) {
+    pitch = p;
+    updateCameraVectors();
+  }
 
   void setAspectRatio(float aspect) {
     aspectRatio = aspect;

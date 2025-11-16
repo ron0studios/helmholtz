@@ -52,9 +52,9 @@ public:
   const std::vector<RadioSource> &getNodes() const {
     return radioSystem.getSources();
   }
-  
-  RadioSystem* getRadioSystem() { return &radioSystem; }
-  const RadioSystem* getRadioSystem() const { return &radioSystem; }
+
+  RadioSystem *getRadioSystem() { return &radioSystem; }
+  const RadioSystem *getRadioSystem() const { return &radioSystem; }
 
   // Update (for animations, etc.)
   void update(float deltaTime);
