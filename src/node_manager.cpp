@@ -29,6 +29,11 @@ void NodeManager::deleteSelectedNode() {
   }
 }
 
+void NodeManager::clearAllNodes() {
+  selectedNodeId = -1;
+  radioSystem.clearAllSources();
+}
+
 void NodeManager::selectNode(int id) {
   if (selectedNodeId >= 0) {
     RadioSource *prevNode = radioSystem.getSourceById(selectedNodeId);

@@ -3,6 +3,7 @@
 #include "fdtd_solver.h"
 #include "node_manager.h"
 #include "volume_renderer.h"
+#include "scene_serializer.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -70,18 +71,18 @@ void UIManager::beginFrame() {
   ImGui::NewFrame();
 }
 
+void UIManager::setSceneDataPointers(void* sceneData) {
+  sceneDataPtr = sceneData;
+}
+
 void UIManager::render(const Camera &camera, float fps, float deltaTime,
                        NodeManager *nodeManager) {
-  if (state.showControlPanel) {
-    renderControlPanel(camera, fps, deltaTime);
-  }
-
   if (state.showPerformanceWindow) {
     renderPerformanceWindow(fps, deltaTime);
   }
 
   if (state.showNodePanel && nodeManager) {
-    renderNodePanel(nodeManager);
+    renderNodePanel(nodeManager, camera);
   }
 
   if (state.showAboutWindow) {
@@ -124,59 +125,6 @@ void UIManager::setMouseLookMode(bool enabled) {
   } else {
     io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
   }
-}
-
-void UIManager::renderControlPanel(const Camera &camera, float fps,
-                                   float deltaTime) {
-  ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(350, 400), ImGuiCond_FirstUseEver);
-
-  ImGui::Begin("Control Panel", &state.showControlPanel);
-
-  if (ImGui::CollapsingHeader("Application", ImGuiTreeNodeFlags_DefaultOpen)) {
-    ImGui::Text("RF Propagation Modelling Tool");
-    ImGui::Separator();
-
-    if (ImGui::Button("Show Demo Window")) {
-      state.showDemoWindow = !state.showDemoWindow;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("About")) {
-      state.showAboutWindow = !state.showAboutWindow;
-    }
-  }
-
-  if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-    glm::vec3 pos = camera.getPosition();
-    glm::vec3 front = camera.getFront();
-    glm::vec3 up = camera.getUp();
-
-    ImGui::Text("Position:");
-    ImGui::BulletText("X: %.2f", pos.x);
-    ImGui::BulletText("Y: %.2f", pos.y);
-    ImGui::BulletText("Z: %.2f", pos.z);
-
-    ImGui::Spacing();
-    ImGui::Text("Direction:");
-    ImGui::BulletText("X: %.2f", front.x);
-    ImGui::BulletText("Y: %.2f", front.y);
-    ImGui::BulletText("Z: %.2f", front.z);
-
-    ImGui::Spacing();
-    ImGui::Text("FOV: %.1f°", camera.getFov());
-  }
-
-  if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
-    ImGui::TextWrapped("ESC - Exit application");
-    ImGui::TextWrapped("TAB - Toggle mouse look");
-    ImGui::TextWrapped("WASD - Move camera");
-    ImGui::TextWrapped("Q/E - Move up/down");
-    ImGui::TextWrapped("SHIFT - Speed boost");
-    ImGui::TextWrapped("Mouse - Look around");
-    ImGui::TextWrapped("Scroll - Zoom");
-  }
-
-  ImGui::End();
 }
 
 void UIManager::renderPerformanceWindow(float fps, float deltaTime) {
@@ -240,11 +188,33 @@ void UIManager::renderAboutWindow() {
   ImGui::End();
 }
 
-void UIManager::renderNodePanel(NodeManager *nodeManager) {
-  ImGui::SetNextWindowPos(ImVec2(10, 580), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(350, 400), ImGuiCond_FirstUseEver);
+void UIManager::renderNodePanel(NodeManager *nodeManager, const Camera &camera) {
+  ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(350, 600), ImGuiCond_FirstUseEver);
 
-  ImGui::Begin("Nodes", &state.showNodePanel);
+  ImGui::Begin("Nodes & Control", &state.showNodePanel);
+
+  // Camera info at the top
+  if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+    glm::vec3 pos = camera.getPosition();
+    glm::vec3 front = camera.getFront();
+
+    ImGui::Text("Position: %.1f, %.1f, %.1f", pos.x, pos.y, pos.z);
+    ImGui::Text("Direction: %.2f, %.2f, %.2f", front.x, front.y, front.z);
+    ImGui::Text("FOV: %.1f°", camera.getFov());
+
+    ImGui::Spacing();
+    if (ImGui::TreeNode("Controls")) {
+      ImGui::TextWrapped("WASD - Move camera");
+      ImGui::TextWrapped("Q/E - Move up/down");
+      ImGui::TextWrapped("Mouse - Look around");
+      ImGui::TextWrapped("Scroll - Zoom");
+      ImGui::TextWrapped("SHIFT - Speed boost");
+      ImGui::TextWrapped("TAB - Toggle mouse look");
+      ImGui::TextWrapped("ESC - Exit");
+      ImGui::TreePop();
+    }
+  }
 
   if (ImGui::CollapsingHeader("Placement", ImGuiTreeNodeFlags_DefaultOpen)) {
     bool placementMode = nodeManager->isPlacementMode();
@@ -336,6 +306,62 @@ void UIManager::renderNodePanel(NodeManager *nodeManager) {
     ImGui::ColorEdit3("Color", &selectedNode->color.x);
 
     ImGui::PopItemWidth();
+  }
+  
+  // Scene Save/Load section
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+  
+  if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
+    static char saveFilePath[256] = "scene.hscene";
+    static char loadFilePath[256] = "scene.hscene";
+    
+    ImGui::Text("Save Scene");
+    ImGui::InputText("##SavePath", saveFilePath, sizeof(saveFilePath));
+    ImGui::SameLine();
+    if (ImGui::Button("Save")) {
+      if (sceneDataPtr) {
+        SceneData* sceneData = static_cast<SceneData*>(sceneDataPtr);
+        if (SceneSerializer::saveScene(saveFilePath, nodeManager, *sceneData)) {
+          ImGui::OpenPopup("SaveSuccess");
+        }
+      }
+    }
+    
+    ImGui::Spacing();
+    ImGui::Text("Load Scene");
+    ImGui::InputText("##LoadPath", loadFilePath, sizeof(loadFilePath));
+    ImGui::SameLine();
+    if (ImGui::Button("Load")) {
+      if (sceneDataPtr) {
+        SceneData* sceneData = static_cast<SceneData*>(sceneDataPtr);
+        if (SceneSerializer::loadScene(loadFilePath, nodeManager, *sceneData)) {
+          sceneJustLoaded = true;
+          ImGui::OpenPopup("LoadSuccess");
+        }
+      }
+    }
+    
+    // Success popups
+    if (ImGui::BeginPopupModal("SaveSuccess", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::Text("Scene saved successfully!");
+      if (ImGui::Button("OK", ImVec2(120, 0))) {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
+    
+    if (ImGui::BeginPopupModal("LoadSuccess", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::Text("Scene loaded successfully!");
+      if (ImGui::Button("OK", ImVec2(120, 0))) {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
+    
+    ImGui::Spacing();
+    ImGui::TextWrapped("Scenes include: nodes, FDTD settings, camera position, and visualization settings.");
   }
 
   ImGui::End();

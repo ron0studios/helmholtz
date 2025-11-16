@@ -47,9 +47,14 @@ public:
   float getVoxelSpacing() const { return voxelSpacing; }
   void setVoxelSpacing(float spacing) { voxelSpacing = spacing; }
 
+  // Conductivity controls (wave attenuation)
+  float getConductivity() const { return conductivity; }
+  void setConductivity(float cond) { conductivity = cond; }
+
 private:
   int gridSize;
   float voxelSpacing; // Meters per voxel (default 5.0)
+  float conductivity; // Medium conductivity (S/m)
 
   // Field textures
   GLuint texEx, texEy, texEz;

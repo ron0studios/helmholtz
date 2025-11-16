@@ -18,6 +18,7 @@ public:
                  NodeType type = NodeType::TRANSMITTER);
   void deleteNode(int id);
   void deleteSelectedNode();
+  void clearAllNodes();
 
   // Node selection
   void selectNode(int id);
@@ -51,6 +52,9 @@ public:
   const std::vector<RadioSource> &getNodes() const {
     return radioSystem.getSources();
   }
+  
+  RadioSystem* getRadioSystem() { return &radioSystem; }
+  const RadioSystem* getRadioSystem() const { return &radioSystem; }
 
   // Update (for animations, etc.)
   void update(float deltaTime);

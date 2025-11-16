@@ -39,6 +39,7 @@ add_executable(radio_viz
     src/ui_manager.cpp
     src/fdtd_solver.cpp
     src/volume_renderer.cpp
+    src/scene_serializer.cpp
     ${IMGUI_SOURCES}
 )
 

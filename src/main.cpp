@@ -17,6 +17,7 @@
 #include "spatial_index.h"
 #include "ui_manager.h"
 #include "volume_renderer.h"
+#include "scene_serializer.h"
 
 Camera camera(45.0f, 1920.0f / 1080.0f, 0.1f, 10000.0f);
 float lastX = 960.0f;
@@ -442,6 +443,22 @@ int main() {
   fdtdSolver.markGeometryGPU(fdtdGridCenter, fdtdGridHalfSize, spatialIndex,
                              0.0f, 50.0f);
 
+  // Create scene data for save/load functionality
+  SceneData sceneData;
+  sceneData.cameraPosition = camera.getPosition();
+  sceneData.cameraYaw = camera.getYaw();
+  sceneData.cameraPitch = camera.getPitch();
+  sceneData.fdtdGridHalfSize = fdtdGridHalfSize;
+  sceneData.voxelSpacing = fdtdSolver.getVoxelSpacing();
+  sceneData.conductivity = fdtdSolver.getConductivity();
+  sceneData.gradientColorLow = volumeRenderer.getGradientColorLow();
+  sceneData.gradientColorHigh = volumeRenderer.getGradientColorHigh();
+  sceneData.showEmissionSource = volumeRenderer.getShowEmissionSource();
+  sceneData.showGeometryEdges = volumeRenderer.getShowGeometryEdges();
+  
+  // Pass scene data pointer to UI manager
+  uiManager.setSceneDataPointers(&sceneData);
+
   AppState appState;
   appState.uiManager = &uiManager;
   appState.nodeManager = &nodeManager;
@@ -669,6 +686,18 @@ int main() {
                                           previewColor, view, projection);
     }
 
+    // Update scene data for save/load
+    sceneData.cameraPosition = camera.getPosition();
+    sceneData.cameraYaw = camera.getYaw();
+    sceneData.cameraPitch = camera.getPitch();
+    sceneData.fdtdGridHalfSize = fdtdGridHalfSize;
+    sceneData.voxelSpacing = fdtdSolver.getVoxelSpacing();
+    sceneData.conductivity = fdtdSolver.getConductivity();
+    sceneData.gradientColorLow = volumeRenderer.getGradientColorLow();
+    sceneData.gradientColorHigh = volumeRenderer.getGradientColorHigh();
+    sceneData.showEmissionSource = volumeRenderer.getShowEmissionSource();
+    sceneData.showGeometryEdges = volumeRenderer.getShowGeometryEdges();
+
     uiManager.beginFrame();
     uiManager.render(camera, fps, deltaTime, &nodeManager);
     uiManager.renderFDTDPanel(
@@ -676,6 +705,22 @@ int main() {
         appState.fdtdEmissionStrength, appState.fdtdContinuousEmission,
         fdtdGridCenter, fdtdGridHalfSize, appState.fdtdAutoCenterGrid,
         &fdtdSolver, &volumeRenderer);
+    
+    // Apply loaded scene data if a scene was just loaded
+    if (uiManager.wasSceneLoaded()) {
+      camera.setPosition(sceneData.cameraPosition);
+      camera.setYaw(sceneData.cameraYaw);
+      camera.setPitch(sceneData.cameraPitch);
+      fdtdGridHalfSize = sceneData.fdtdGridHalfSize;
+      fdtdSolver.setVoxelSpacing(sceneData.voxelSpacing);
+      fdtdSolver.setConductivity(sceneData.conductivity);
+      volumeRenderer.setGradientColorLow(sceneData.gradientColorLow);
+      volumeRenderer.setGradientColorHigh(sceneData.gradientColorHigh);
+      volumeRenderer.setShowEmissionSource(sceneData.showEmissionSource);
+      volumeRenderer.setShowGeometryEdges(sceneData.showGeometryEdges);
+      uiManager.clearSceneLoadedFlag();
+    }
+    
     uiManager.endFrame();
 
     glfwSwapBuffers(window);

@@ -44,6 +44,13 @@ public:
 
   // Set whether mouse look mode is active (disables ImGui input capture)
   void setMouseLookMode(bool enabled);
+  
+  // Set scene data reference for save/load
+  void setSceneDataPointers(void* sceneDataPtr);
+  
+  // Check if scene was just loaded
+  bool wasSceneLoaded() const { return sceneJustLoaded; }
+  void clearSceneLoadedFlag() { sceneJustLoaded = false; }
 
   // Render FDTD control panel
   void renderFDTDPanel(bool &fdtdEnabled, bool &fdtdPaused,
@@ -54,7 +61,6 @@ public:
 
   // UI state
   struct UIState {
-    bool showControlPanel = true;
     bool showAboutWindow = false;
     bool showDemoWindow = false;
     bool showPerformanceWindow = true;
@@ -63,13 +69,16 @@ public:
   } state;
 
 private:
-  void renderControlPanel(const Camera &camera, float fps, float deltaTime);
   void renderAboutWindow();
   void renderPerformanceWindow(float fps, float deltaTime);
-  void renderNodePanel(NodeManager *nodeManager);
+  void renderNodePanel(NodeManager *nodeManager, const Camera &camera);
 
   bool initialized = false;
   GLFWwindow *window = nullptr;
+  
+  // Scene data for save/load
+  void* sceneDataPtr = nullptr;
+  bool sceneJustLoaded = false;
 
   // Performance tracking
   static const int FPS_SAMPLE_COUNT = 60;

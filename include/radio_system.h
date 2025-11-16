@@ -69,6 +69,7 @@ public:
                 NodeType type = NodeType::TRANSMITTER);
   void removeSource(int id);
   void removeSourceByIndex(int index);
+  void clearAllSources();
   RadioSource *getSourceById(int id);
   RadioSource *getSourceByIndex(int index);
   int getSourceCount() const { return sources.size(); }

@@ -29,6 +29,11 @@ void RadioSystem::removeSourceByIndex(int index) {
   }
 }
 
+void RadioSystem::clearAllSources() {
+  sources.clear();
+  signalRays.clear();
+}
+
 RadioSource *RadioSystem::getSourceById(int id) {
   for (auto &source : sources) {
     if (source.id == id) {
