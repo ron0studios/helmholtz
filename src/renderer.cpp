@@ -54,6 +54,7 @@ bool Renderer::initialize(int width, int height) {
   glGenBuffers(1, &EBO);
 
   glEnable(GL_DEPTH_TEST);
+  glEnable(GL_MULTISAMPLE); // Enable MSAA
 
   glClearColor(0.5f, 0.7f, 1.0f, 1.0f);
 
