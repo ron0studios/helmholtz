@@ -15,20 +15,16 @@ struct RadioSource {
   glm::vec3 orientation;
 
   float frequency;
-  float power;
-  float antennaGain;
-  float antennaHeight;
 
   glm::vec3 color;
   bool selected;
   bool visible;
 
-  RadioSource(int nodeId, const glm::vec3 &pos, float freq, float pwr,
+  RadioSource(int nodeId, const glm::vec3 &pos, float freq,
               NodeType nodeType = NodeType::TRANSMITTER)
       : id(nodeId), name("Node_" + std::to_string(nodeId)), type(nodeType),
         active(true), position(pos), orientation(0.0f, 0.0f, 0.0f),
-        frequency(freq), power(pwr), antennaGain(0.0f), antennaHeight(0.0f),
-        selected(false), visible(true) {
+        frequency(freq), selected(false), visible(true) {
     color = frequencyToColor(freq);
   }
 
@@ -69,10 +65,11 @@ public:
   RadioSystem();
   ~RadioSystem();
 
-  int addSource(const glm::vec3 &position, float frequency, float power,
+  int addSource(const glm::vec3 &position, float frequency,
                 NodeType type = NodeType::TRANSMITTER);
   void removeSource(int id);
   void removeSourceByIndex(int index);
+  void clearAllSources();
   RadioSource *getSourceById(int id);
   RadioSource *getSourceByIndex(int index);
   int getSourceCount() const { return sources.size(); }

@@ -23,6 +23,21 @@ public:
   glm::vec3 getFront() const { return front; }
   glm::vec3 getUp() const { return up; }
   float getFov() const { return fov; }
+  float getYaw() const { return yaw; }
+  float getPitch() const { return pitch; }
+
+  void setPosition(const glm::vec3 &pos) {
+    position = pos;
+    updateCameraVectors();
+  }
+  void setYaw(float y) {
+    yaw = y;
+    updateCameraVectors();
+  }
+  void setPitch(float p) {
+    pitch = p;
+    updateCameraVectors();
+  }
 
   void setAspectRatio(float aspect) {
     aspectRatio = aspect;

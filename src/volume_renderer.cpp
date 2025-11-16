@@ -7,7 +7,10 @@
 
 VolumeRenderer::VolumeRenderer()
     : vao(0), vbo(0), shaderProgram(0), intensityScale(20.0f), stepCount(200),
-      showEmissionSource(true), showGeometryEdges(false) {}
+      showEmissionSource(true), showGeometryEdges(false),
+      gradientColorLow(0.0f, 0.0f, 0.5f),   // Dark blue
+      gradientColorHigh(1.0f, 0.0f, 0.0f) { // Red
+}
 
 VolumeRenderer::~VolumeRenderer() { cleanup(); }
 
@@ -153,6 +156,12 @@ void VolumeRenderer::render(GLuint fieldTexture, GLuint epsilonTexture,
               showEmissionSource);
   glUniform1i(glGetUniformLocation(shaderProgram, "showGeometryEdges"),
               showGeometryEdges);
+
+  // Set gradient colors
+  glUniform3f(glGetUniformLocation(shaderProgram, "gradientColorLow"),
+              gradientColorLow.x, gradientColorLow.y, gradientColorLow.z);
+  glUniform3f(glGetUniformLocation(shaderProgram, "gradientColorHigh"),
+              gradientColorHigh.x, gradientColorHigh.y, gradientColorHigh.z);
 
   // Bind textures
   glActiveTexture(GL_TEXTURE0);

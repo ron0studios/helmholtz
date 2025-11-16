@@ -14,9 +14,11 @@
 #include "node_renderer.h"
 #include "radio_system.h"
 #include "renderer.h"
+#include "scene_serializer.h"
 #include "spatial_index.h"
 #include "ui_manager.h"
 #include "volume_renderer.h"
+
 
 Camera camera(45.0f, 1920.0f / 1080.0f, 0.1f, 10000.0f);
 float lastX = 960.0f;
@@ -179,7 +181,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action,
             rayOrigin, rayDirection, appState->spatialIndex, hit);
 
         NodeType type = appState->nodeManager->getPlacementType();
-        appState->nodeManager->createNode(position, 2.4e9f, 20.0f, type);
+        appState->nodeManager->createNode(position, 2.4e9f, type);
 
         appState->showPlacementPreview = false;
       } else {
@@ -412,9 +414,9 @@ int main() {
     return -1;
   }
 
-  nodeManager.createNode(glm::vec3(100.0f, 150.0f, 100.0f), 2.4e9f, 20.0f,
+  nodeManager.createNode(glm::vec3(100.0f, 150.0f, 100.0f), 2.4e9f,
                          NodeType::TRANSMITTER);
-  nodeManager.createNode(glm::vec3(-100.0f, 120.0f, -100.0f), 2.4e9f, 20.0f,
+  nodeManager.createNode(glm::vec3(-100.0f, 120.0f, -100.0f), 2.4e9f,
                          NodeType::RECEIVER);
 
   // Initialize FDTD system
@@ -442,6 +444,22 @@ int main() {
   std::cout << "Marking geometry in FDTD grid using GPU..." << std::endl;
   fdtdSolver.markGeometryGPU(fdtdGridCenter, fdtdGridHalfSize, spatialIndex,
                              0.0f, 50.0f);
+
+  // Create scene data for save/load functionality
+  SceneData sceneData;
+  sceneData.cameraPosition = camera.getPosition();
+  sceneData.cameraYaw = camera.getYaw();
+  sceneData.cameraPitch = camera.getPitch();
+  sceneData.fdtdGridHalfSize = fdtdGridHalfSize;
+  sceneData.voxelSpacing = fdtdSolver.getVoxelSpacing();
+  sceneData.conductivity = fdtdSolver.getConductivity();
+  sceneData.gradientColorLow = volumeRenderer.getGradientColorLow();
+  sceneData.gradientColorHigh = volumeRenderer.getGradientColorHigh();
+  sceneData.showEmissionSource = volumeRenderer.getShowEmissionSource();
+  sceneData.showGeometryEdges = volumeRenderer.getShowGeometryEdges();
+
+  // Pass scene data pointer to UI manager
+  uiManager.setSceneDataPointers(&sceneData);
 
   AppState appState;
   appState.uiManager = &uiManager;
@@ -670,6 +688,18 @@ int main() {
                                           previewColor, view, projection);
     }
 
+    // Update scene data for save/load
+    sceneData.cameraPosition = camera.getPosition();
+    sceneData.cameraYaw = camera.getYaw();
+    sceneData.cameraPitch = camera.getPitch();
+    sceneData.fdtdGridHalfSize = fdtdGridHalfSize;
+    sceneData.voxelSpacing = fdtdSolver.getVoxelSpacing();
+    sceneData.conductivity = fdtdSolver.getConductivity();
+    sceneData.gradientColorLow = volumeRenderer.getGradientColorLow();
+    sceneData.gradientColorHigh = volumeRenderer.getGradientColorHigh();
+    sceneData.showEmissionSource = volumeRenderer.getShowEmissionSource();
+    sceneData.showGeometryEdges = volumeRenderer.getShowGeometryEdges();
+
     uiManager.beginFrame();
     uiManager.render(camera, fps, deltaTime, &nodeManager);
     uiManager.renderFDTDPanel(
@@ -678,6 +708,22 @@ int main() {
         fdtdGridCenter, fdtdGridHalfSize, appState.fdtdAutoCenterGrid,
         &fdtdSolver, &volumeRenderer);
     uiManager.renderVisualSettingsPanel(&renderer);
+
+    // Apply loaded scene data if a scene was just loaded
+    if (uiManager.wasSceneLoaded()) {
+      camera.setPosition(sceneData.cameraPosition);
+      camera.setYaw(sceneData.cameraYaw);
+      camera.setPitch(sceneData.cameraPitch);
+      fdtdGridHalfSize = sceneData.fdtdGridHalfSize;
+      fdtdSolver.setVoxelSpacing(sceneData.voxelSpacing);
+      fdtdSolver.setConductivity(sceneData.conductivity);
+      volumeRenderer.setGradientColorLow(sceneData.gradientColorLow);
+      volumeRenderer.setGradientColorHigh(sceneData.gradientColorHigh);
+      volumeRenderer.setShowEmissionSource(sceneData.showEmissionSource);
+      volumeRenderer.setShowGeometryEdges(sceneData.showGeometryEdges);
+      uiManager.clearSceneLoadedFlag();
+    }
+
     uiManager.endFrame();
 
     // Update renderer with visual settings

@@ -17,16 +17,16 @@ uniform int stepCount;               // Ray-marching steps
 uniform bool showEmissionSource;     // Show emission markers
 uniform bool showGeometryEdges;      // Show geometry wireframe
 
+// Gradient colors for waveform
+uniform vec3 gradientColorLow;       // Color for low intensity (default: dark blue)
+uniform vec3 gradientColorHigh;      // Color for high intensity (default: red)
+
 vec3 valueToColor(float value) {
-    // Map field strength to red color with some variation
+    // Map field strength to smooth gradient from low to high color
     float intensity = abs(value);
     
-    // Add some blue-red variation based on sign for better visualization
-    if (value > 0.0) {
-        return vec3(intensity, 0.0, 0.0); // Red for positive
-    } else {
-        return vec3(0.0, 0.0, intensity); // Blue for negative
-    }
+    // Smooth gradient interpolation
+    return mix(gradientColorLow, gradientColorHigh, intensity);
 }
 
 bool isEdge(vec3 texCoord) {
@@ -114,7 +114,7 @@ void main() {
         
         // Check for material edge and add wireframe
         if (isEdge(texCoord)) {
-            sampleColor = vec4(0.0, 1.0, 0.0, 0.5); // Green wireframe
+            sampleColor = vec4(0.5, 0.5, 0.5, 0.5); // Grey wireframe
         }
         
         // Front-to-back compositing
