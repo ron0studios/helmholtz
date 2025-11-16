@@ -1,0 +1,33 @@
+# Helmholtz Scene File
+# Generated scene configuration
+
+[Camera]
+position=-1031.404053,314.443939,636.390686
+yaw=-4.382465
+pitch=-4.227335
+
+[Grid]
+halfSize=500.000000,500.000000,500.000000
+voxelSpacing=0.100000
+conductivity=0.000100
+
+[Visualization]
+gradientColorLow=0.000000,0.000000,0.500000
+gradientColorHigh=1.000000,0.000000,0.000000
+showEmissionSource=true
+showGeometryEdges=false
+
+[Nodes]
+count=1
+
+[Node0]
+id=1
+name=Node_1
+type=0
+active=true
+position=519.223145,150.000000,529.076965
+orientation=0.000000,0.000000,0.000000
+frequency=2400000000.000000
+color=0.300000,1.000000,0.300000
+visible=true
+
