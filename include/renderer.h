@@ -28,7 +28,5 @@ private:
   GLuint compileShader(const std::string &source, GLenum type);
   GLuint createShaderProgram(const std::string &vertexSource,
                              const std::string &fragmentSource);
-
-  static const std::string vertexShaderSource;
-  static const std::string fragmentShaderSource;
+  char *loadShaderSource(const char *path);
 };

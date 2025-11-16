@@ -1,68 +1,49 @@
 #include "renderer.h"
 
+#include <cstring>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <vector>
-
-const std::string Renderer::vertexShaderSource = R"(
-#version 330 core
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec3 aNormal;
-
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
-
-out vec3 FragPos;
-out vec3 Normal;
-
-void main() {
-    FragPos = vec3(model * vec4(aPos, 1.0));
-    Normal = mat3(transpose(inverse(model))) * aNormal;
-    
-    gl_Position = projection * view * vec4(FragPos, 1.0);
-}
-)";
-
-const std::string Renderer::fragmentShaderSource = R"(
-#version 330 core
-out vec4 FragColor;
-
-in vec3 FragPos;
-in vec3 Normal;
-
-uniform vec3 lightPos;
-uniform vec3 lightColor;
-uniform vec3 viewPos;
-
-void main() {
-    vec3 color = vec3(0.6, 0.7, 0.8);
-    
-    float ambientStrength = 0.3;
-    vec3 ambient = ambientStrength * lightColor;
-    
-    vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(lightPos - FragPos);
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * lightColor;
-    
-    float specularStrength = 0.1;
-    vec3 viewDir = normalize(viewPos - FragPos);
-    vec3 reflectDir = reflect(-lightDir, norm);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-    vec3 specular = specularStrength * spec * lightColor;
-    
-    vec3 result = (ambient + diffuse + specular) * color;
-    FragColor = vec4(result, 1.0);
-}
-)";
 
 Renderer::Renderer()
     : shaderProgram(0), VAO(0), VBO(0), EBO(0), indexCount(0) {}
 
 Renderer::~Renderer() { cleanup(); }
 
+char *Renderer::loadShaderSource(const char *path) {
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    std::cerr << "Failed to open shader file: " << path << std::endl;
+    return nullptr;
+  }
+
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+  std::string content = buffer.str();
+
+  char *source = new char[content.size() + 1];
+  std::strcpy(source, content.c_str());
+
+  return source;
+}
+
 bool Renderer::initialize(int width, int height) {
-  shaderProgram = createShaderProgram(vertexShaderSource, fragmentShaderSource);
+  char *vertexSource = loadShaderSource("shaders/scene.vert");
+  char *fragmentSource = loadShaderSource("shaders/scene.frag");
+
+  if (!vertexSource || !fragmentSource) {
+    delete[] vertexSource;
+    delete[] fragmentSource;
+    std::cerr << "Failed to load scene shaders" << std::endl;
+    return false;
+  }
+
+  shaderProgram = createShaderProgram(vertexSource, fragmentSource);
+
+  delete[] vertexSource;
+  delete[] fragmentSource;
+
   if (shaderProgram == 0) {
     std::cerr << "Failed to create shader program" << std::endl;
     return false;
