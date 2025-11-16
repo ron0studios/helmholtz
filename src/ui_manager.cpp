@@ -93,6 +93,38 @@ void UIManager::render(const Camera &camera, float fps, float deltaTime,
   }
 }
 
+void UIManager::renderVisualSettingsPanel(void *rendererPtr) {
+  ImGui::SetNextWindowPos(ImVec2(730, 10), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(350, 400), ImGuiCond_FirstUseEver);
+
+  ImGui::Begin("Visual Settings", &state.showVisualSettingsPanel);
+
+  if (ImGui::CollapsingHeader("Fog", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Checkbox("Enable Fog", &visualSettings.enableFog);
+    
+    if (visualSettings.enableFog) {
+      ImGui::Spacing();
+      ImGui::Text("Fog Density:");
+      ImGui::SliderFloat("##FogDensity", &visualSettings.fogDensity, 0.0f, 0.001f, "%.6f");
+      
+      ImGui::Spacing();
+      ImGui::Text("Fog Color:");
+      ImGui::ColorEdit3("##FogColor", &visualSettings.fogColor.x);
+      
+      ImGui::Spacing();
+      ImGui::TextWrapped("Fog creates atmospheric depth and smooths distant geometry.");
+    }
+  }
+
+  if (ImGui::CollapsingHeader("Anti-Aliasing")) {
+    ImGui::TextWrapped("MSAA 4x: Enabled");
+    ImGui::Spacing();
+    ImGui::TextWrapped("Multisample Anti-Aliasing smooths edges and reduces jagged lines.");
+  }
+
+  ImGui::End();
+}
+
 void UIManager::endFrame() {
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

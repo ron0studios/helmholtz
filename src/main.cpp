@@ -677,7 +677,11 @@ int main() {
         appState.fdtdEmissionStrength, appState.fdtdContinuousEmission,
         fdtdGridCenter, fdtdGridHalfSize, appState.fdtdAutoCenterGrid,
         &fdtdSolver, &volumeRenderer);
+    uiManager.renderVisualSettingsPanel(&renderer);
     uiManager.endFrame();
+
+    // Update renderer with visual settings
+    renderer.setVisualSettings(uiManager.visualSettings);
 
     glfwSwapBuffers(window);
     glfwPollEvents();

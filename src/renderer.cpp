@@ -88,6 +88,15 @@ void Renderer::render(const glm::mat4 &view, const glm::mat4 &projection,
   glm::vec3 cameraPos = glm::vec3(invView[3]);
   glUniform3f(viewPosLoc, cameraPos.x, cameraPos.y, cameraPos.z);
 
+  // Visual settings uniforms
+  GLint enableFogLoc = glGetUniformLocation(shaderProgram, "enableFog");
+  GLint fogDensityLoc = glGetUniformLocation(shaderProgram, "fogDensity");
+  GLint fogColorLoc = glGetUniformLocation(shaderProgram, "fogColor");
+
+  glUniform1i(enableFogLoc, visualSettings.enableFog ? 1 : 0);
+  glUniform1f(fogDensityLoc, visualSettings.fogDensity);
+  glUniform3f(fogColorLoc, visualSettings.fogColor.x, visualSettings.fogColor.y, visualSettings.fogColor.z);
+
   glBindVertexArray(VAO);
   glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexCount),
                  GL_UNSIGNED_INT, 0);

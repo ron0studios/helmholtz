@@ -8,6 +8,11 @@ uniform vec3 lightPos;
 uniform vec3 lightColor;
 uniform vec3 viewPos;
 
+// Visual settings uniforms
+uniform bool enableFog;
+uniform float fogDensity;
+uniform vec3 fogColor;
+
 void main() {
     vec3 color = vec3(0.6, 0.7, 0.8);
     
@@ -27,21 +32,14 @@ void main() {
     
     vec3 result = (ambient + diffuse + specular) * color;
     
-    // Distance fog
     float distance = length(viewPos - FragPos);
-    float fogStart = 500.0;
-    float fogEnd = 3000.0;
-    float fogDensity = 0.0003;
     
-    // Exponential fog
-    float fogFactor = exp(-fogDensity * distance);
-    fogFactor = clamp(fogFactor, 0.0, 1.0);
-    
-    // Fog color (sky blue with slight haze)
-    vec3 fogColor = vec3(0.5, 0.7, 1.0);
-    
-    // Mix scene color with fog
-    result = mix(fogColor, result, fogFactor);
+    // Distance fog
+    if (enableFog) {
+        float fogFactor = exp(-fogDensity * distance);
+        fogFactor = clamp(fogFactor, 0.0, 1.0);
+        result = mix(fogColor, result, fogFactor);
+    }
     
     FragColor = vec4(result, 1.0);
 }

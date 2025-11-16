@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <string>
+#include "visual_settings.h"
 
 class Camera;
 class NodeManager;
@@ -52,6 +53,9 @@ public:
                        float &gridHalfSize, bool &autoCenterGrid,
                        void *fdtdSolverPtr, void *volumeRendererPtr);
 
+  // Render visual settings panel
+  void renderVisualSettingsPanel(void *rendererPtr);
+
   // UI state
   struct UIState {
     bool showControlPanel = true;
@@ -60,7 +64,11 @@ public:
     bool showPerformanceWindow = true;
     bool showNodePanel = true;
     bool showFDTDPanel = true;
+    bool showVisualSettingsPanel = true;
   } state;
+
+  // Visual settings
+  VisualSettings visualSettings;
 
 private:
   void renderControlPanel(const Camera &camera, float fps, float deltaTime);
