@@ -10,6 +10,8 @@ tl;dr: we use a ton of cool tech to make an insane physics visualization, along 
 
 # submission
 
+[![video](https://img.youtube.com/vi/ZBChAesXt1Q/0.jpg)](https://www.youtube.com/watch?v=ZBChAesXt1Q)
+
 # images
 
 These are screenshots of a live simulation. Our presentation video is also available above.
