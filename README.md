@@ -1,6 +1,8 @@
 # wavelet
 
-This project was created for Junction 2025.
+This project was created for Junction 2025. 
+
+we won both the sensofusion track for radio city, and the entire hackathon.
 
 We visualize EM (specifically on the radio spectrum) via the Maxwell equations which describe EM radiation in a specified grid, giving time-based mathematical wave-forms. This was done in Pure C++ / OpenGL with no other dependencies. Optimized for GPU rendering. We heavily abused compute shaders, parallelism, culling, and tons of graphics programming principles.
 
