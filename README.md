@@ -1,4 +1,4 @@
-# wavelet
+# Wavelet
 
 This project was created for Junction 2025. 
 
